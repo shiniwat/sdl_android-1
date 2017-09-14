@@ -21,7 +21,7 @@ public class MultiplexTransportTest extends AndroidTestCase {
 		super.setUp();
 		rsvp = new RouterServiceValidator(this.mContext);
 		rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_NONE);
-		rsvp.validate();
+		rsvp.validate(TransportType.MULTIPLEX);
 		
 		transportListener = new ITransportListener(){
 

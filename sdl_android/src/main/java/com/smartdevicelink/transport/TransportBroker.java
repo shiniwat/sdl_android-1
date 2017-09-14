@@ -21,6 +21,7 @@ import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
 import com.smartdevicelink.transport.utl.ByteArrayMessageSpliter;
+import com.smartdevicelink.util.DebugTool;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -172,12 +173,16 @@ public class TransportBroker {
             			// yay! we have been registered. Now what?
             			broker.registeredWithRouterService = true;
             			if(bundle !=null){
-            				if(bundle.containsKey(TransportConstants.HARDWARE_CONNECTED)){
-            					if(bundle.containsKey(TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME)){
-            						//Keep track if we actually get this
-            					}
-            					broker.onHardwareConnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED)));
-            				}
+							if(bundle.containsKey(TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME)){
+								//Keep track if we actually get this
+							}
+							if(bundle.containsKey(TransportConstants.HARDWARE_CONNECTED)){
+								broker.onHardwareConnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED)));
+							} else if (bundle.containsKey(TransportConstants.HARDWARE_CONNECTED_AOA)) {
+								TransportType transportType = TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED_AOA));
+								broker.onHardwareConnected(transportType);
+								provider.get().sendUsbAttachedToRouter(transportType);
+							}
             				if(bundle.containsKey(TransportConstants.ROUTER_SERVICE_VERSION)){
             					broker.routerServiceVersion = bundle.getInt(TransportConstants.ROUTER_SERVICE_VERSION);
             				}
@@ -266,7 +271,14 @@ public class TransportBroker {
         					broker.onHardwareDisconnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_DISCONNECTED)));
         				}
         				break;
-        			}
+					} else if (bundle.containsKey(TransportConstants.HARDWARE_DISCONNECTED_AOA)) {
+						DebugTool.logInfo("Hardware disconnected");
+						if (isLegacyModeEnabled()) {
+							broker.onLegacyModeEnabled();
+						} else {
+							broker.onHardwareDisconnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_DISCONNECTED_AOA)));
+						}
+					}
         			
         			if(bundle.containsKey(TransportConstants.HARDWARE_CONNECTED)){
             			if(bundle!=null && bundle.containsKey(TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME)){
@@ -274,7 +286,9 @@ public class TransportBroker {
         				}
             			broker.onHardwareConnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED)));
         				break;
-        			}
+					} else if (bundle.containsKey(TransportConstants.HARDWARE_CONNECTED_AOA)) {
+						broker.onHardwareConnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED_AOA)));
+					}
             		break;
             	default:
                     super.handleMessage(msg);
@@ -316,8 +330,8 @@ public class TransportBroker {
 		/**
 		 * This beings the initial connection with the router service.
 		 */
-		public boolean start(){
-			//Log.d(TAG, "Starting up transport broker for " + whereToReply);
+		public boolean start(TransportType type){
+			Log.d(TAG, "Starting up transport broker for " + whereToReply);
 			synchronized(INIT_LOCK){
 				if(currentContext==null){
 					throw new IllegalStateException("This instance can't be started since it's local reference of context is null. Ensure when suppling a context to the TransportBroker that it is valid");
@@ -325,9 +339,9 @@ public class TransportBroker {
 				if(routerConnection==null){
 					initRouterConnection();
 				}
-				//Log.d(TAG, "Registering our reply receiver: " + whereToReply);
+				Log.d(TAG, "Registering our reply receiver: " + whereToReply);
 				if(!isBound){
-					return registerWithRouterService();
+					return registerWithRouterService(type);
 				}else{
 					return false;
 				}
@@ -371,8 +385,8 @@ public class TransportBroker {
 		}
 		/***************************************************************************************************************************************
 		***********************************************  Event Callbacks  **************************************************************
-		****************************************************************************************************************************************/	
-		
+		****************************************************************************************************************************************/
+		private static boolean mUsbConnected = false;
 		
 		public void onServiceUnregsiteredFromRouterService(int unregisterCode){
 			queuedOnTransportConnect = null;
@@ -384,34 +398,53 @@ public class TransportBroker {
 				routerServiceMessenger = null;
 				routerConnection = null;
 				queuedOnTransportConnect = null;
+				if (type == TransportType.USB || type == TransportType.MULTIPLEX_AOA) {
+					mUsbConnected = false;
+				}
 			}
 		}
 		
 		public boolean onHardwareConnected(TransportType type){
 			synchronized(INIT_LOCK){
-				if(routerServiceMessenger==null){
-					queuedOnTransportConnect = type;
-					return false;
+				if (type == TransportType.MULTIPLEX_AOA || type == TransportType.USB) {
+					return mUsbConnected;
+				} else {
+					if (routerServiceMessenger == null) {
+						queuedOnTransportConnect = type;
+						return false;
+					}
+					return true;
 				}
-				return true;
 			}
 			
 		}
-		
+
+		public void sendUsbAttachedToRouter(TransportType type) {
+			DebugTool.logInfo("sendUsbAttachedToRouter");
+			if (type == TransportType.MULTIPLEX_AOA) {
+				Message message = Message.obtain();
+				message.what = TransportConstants.ROUTER_REQUEST_USB_ATTACHED;
+				message.arg1 = MultiplexAOATransport.MUX_STATE_CONNECTED;
+				DebugTool.logInfo("about sending message");
+				sendMessageToRouterService(message);
+			}
+			mUsbConnected = true;
+		}
+
 		public void onPacketReceived(Parcelable packet){
-			
+
 		}
 
 		public void onLegacyModeEnabled(){
-			
+
 		}
-		
+
 		/**
 		 * We want to check to see if the Router service is already up and running
 		 * @param context
 		 * @return
 		 */
-		private boolean isRouterServiceRunning(Context context){
+		private boolean isRouterServiceRunning(Context context, TransportType type){
 			if(context==null){
 				
 				return false;
@@ -419,11 +452,17 @@ public class TransportBroker {
 			ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
 		    for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
 		    	//We will check to see if it contains this name, should be pretty specific
-		    	if ((service.service.getClassName()).toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)) { 
-		            this.routerClassName = service.service.getClassName();
-		            this.routerPackage = service.service.getPackageName();
-		    		return true;
-		        }
+				if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME) && type == TransportType.MULTIPLEX) {
+					this.routerClassName = service.service.getClassName();
+					this.routerPackage = service.service.getPackageName();
+					DebugTool.logInfo("found router service for BT: package=" + this.routerPackage + " : class=" + this.routerClassName);
+					return true;
+				} else if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME) && type == TransportType.MULTIPLEX_AOA) {
+					this.routerClassName = service.service.getClassName();
+					this.routerPackage = service.service.getPackageName();
+					DebugTool.logInfo("found router service for AOA: package=" + this.routerPackage + " : class=" + this.routerClassName);
+					return true;
+				}
 		    }			
 			return false;
 		}
@@ -476,7 +515,7 @@ public class TransportBroker {
 		/**
 		 * This registers this service with the router service
 		 */
-		private boolean registerWithRouterService(){ 
+		private boolean registerWithRouterService(TransportType type){
 			if(getContext()==null){
 				Log.e(TAG, "Context set to null, failing out");
 				return false;
@@ -488,7 +527,7 @@ public class TransportBroker {
 			}
 			//Make sure we know where to bind to
 			if(this.routerService==null){ 
-				if(!isRouterServiceRunning(getContext())){//We should be able to ignore this case because of the validation now
+				if(!isRouterServiceRunning(getContext(), type)){//We should be able to ignore this case because of the validation now
 					Log.d(TAG,whereToReply + " found no router service. Shutting down.");
 					this.onHardwareDisconnected(null);
 					return false;

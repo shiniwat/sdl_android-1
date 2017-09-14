@@ -1,10 +1,10 @@
 package com.smartdevicelink.SdlConnection;
 
 
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import android.content.ComponentName;
-import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
 import com.smartdevicelink.protocol.AbstractProtocol;
@@ -27,37 +27,37 @@ import com.smartdevicelink.transport.TCPTransportConfig;
 import com.smartdevicelink.transport.USBTransport;
 import com.smartdevicelink.transport.USBTransportConfig;
 import com.smartdevicelink.transport.enums.TransportType;
+import com.smartdevicelink.util.DebugTool;
 
 public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	private static final String TAG = "SdlConnection";
-	
+
 	SdlTransport _transport = null;
 	AbstractProtocol _protocol = null;
 	ISdlConnectionListener _connectionListener = null;
-	
+
 
 
 	// Thread safety locks
 	static Object TRANSPORT_REFERENCE_LOCK = new Object();
 	Object PROTOCOL_REFERENCE_LOCK = new Object();
-	
+
 	private Object SESSION_LOCK = new Object();
 	private CopyOnWriteArrayList<SdlSession> listenerList = new CopyOnWriteArrayList<SdlSession>();
 	private static TransportType legacyTransportRequest = null;
 	private final static int BUFF_READ_SIZE = 1000000;
 	protected static MultiplexTransportConfig cachedMultiConfig = null;
-	
+
 	/**
 	 * Constructor.
-	 * 
-	 * @param listener Sdl connection listener.
+	 *
 	 * @param transportConfig Transport configuration for this connection.
 	 */
 	public SdlConnection(BaseTransportConfig transportConfig) {
 		RouterServiceValidator vlad = null;
 		//Let's check if we can even do multiplexing
-		if(transportConfig.getTransportType() == TransportType.MULTIPLEX){
+		if(transportConfig.getTransportType() == TransportType.MULTIPLEX || transportConfig.getTransportType() == TransportType.MULTIPLEX_AOA){
 			ComponentName tempCompName = SdlBroadcastReceiver.consumeQueuedRouterService();
 			MultiplexTransportConfig multiConfig = (MultiplexTransportConfig)transportConfig;
 			if(tempCompName!=null){
@@ -68,16 +68,17 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			//vlad.setFlags(RouterServiceValidator.FLAG_DEBUG_VERSION_CHECK);
 			vlad.setSecurityLevel(multiConfig.getSecurityLevel());
 		}
+		DebugTool.logInfo("SdlConnection: transportConfig=" + transportConfig.getTransportType().toString());
 		constructor(transportConfig,vlad);
 	}
 	//For unit tests
 	protected SdlConnection(BaseTransportConfig transportConfig,RouterServiceValidator rsvp){
 		constructor(transportConfig,rsvp);
 	}
-	
+
 	private void constructor(BaseTransportConfig transportConfig,RouterServiceValidator rsvp){
 		_connectionListener = new InternalMsgDispatcher();
-		
+
 		// Initialize the transport
 		synchronized(TRANSPORT_REFERENCE_LOCK) {
 			// Ensure transport is null
@@ -87,60 +88,99 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				}
 				_transport = null;
 			}
-			
+
 			//Let's check if we can even do multiplexing
 			if(!isLegacyModeEnabled() &&
-					rsvp!= null && 
-					transportConfig.getTransportType() == TransportType.MULTIPLEX){
+					rsvp!= null &&
+					(transportConfig.getTransportType() == TransportType.MULTIPLEX || transportConfig.getTransportType() == TransportType.MULTIPLEX_AOA)){
 				//rsvp = new RouterServiceValidator(((MultiplexTransportConfig)transportConfig).getContext());
 				//vlad.setFlags(RouterServiceValidator.FLAG_DEBUG_VERSION_CHECK);
-				if(rsvp.validate()){
-					Log.w(TAG, "SDL Router service is valid; attempting to connect");
-					((MultiplexTransportConfig)transportConfig).setService(rsvp.getService());//Let thes the transport broker know which service to connect to
+				if(rsvp.validate(transportConfig.getTransportType())){
+					DebugTool.logWarning("SDL Router service is valid; attempting to connect");
+					List<ComponentName> list = rsvp.getServices();
+					ComponentName serviceName = getServiceComponentFromList(list, transportConfig.getTransportType());
+					if (serviceName != null) {
+						((MultiplexTransportConfig)transportConfig).setService(serviceName);//Let the transport broker know which service to connect to
+					}
 				}else{
-					Log.w(TAG, "SDL Router service isn't trusted. Enabling legacy bluetooth connection.");	
+					DebugTool.logWarning("SDL Router service isn't trusted. Enabling legacy bluetooth connection.");
 					if(cachedMultiConfig == null){
 						cachedMultiConfig = (MultiplexTransportConfig) transportConfig;
 						cachedMultiConfig.setService(null);
 					}
-					enableLegacyMode(true,TransportType.BLUETOOTH); //We will use legacy bluetooth connection for this attempt
+					enableLegacyMode(true, (transportConfig.getTransportType() == TransportType.MULTIPLEX) ?
+							TransportType.BLUETOOTH : TransportType.USB); //We will use legacy bluetooth connection for this attempt
 				}
+			} else {
+				DebugTool.logInfo("anyhow validator is skipped");
 			}
-			
-			if(!isLegacyModeEnabled() && //Make sure legacy mode is not enabled
-					(transportConfig.getTransportType() == TransportType.MULTIPLEX)){
-				_transport = new MultiplexTransport((MultiplexTransportConfig)transportConfig,this);
+
+			if(!isLegacyModeEnabled()) { //Make sure legacy mode is not enabled
+				if (transportConfig.getTransportType() == TransportType.MULTIPLEX || transportConfig.getTransportType() == TransportType.MULTIPLEX_AOA) {
+					_transport = new MultiplexTransport((MultiplexTransportConfig) transportConfig, this);
+				} else {
+					DebugTool.logInfo("We may need to turns on legacy mode");
+					// let turns to legacy mode.
+					if (transportConfig.getTransportType() == TransportType.USB) {
+						enableLegacyMode(true, TransportType.USB);
+						_transport = new USBTransport((USBTransportConfig) transportConfig, this);
+					} else {
+						enableLegacyMode(true, TransportType.BLUETOOTH);
+						_transport = new BTTransport(this, true);
+					}
+				}
 			}else if(isLegacyModeEnabled() && legacyTransportRequest == TransportType.BLUETOOTH){
-				_transport = new BTTransport(this, true); 
+				_transport = new BTTransport(this, true);
 			}else if(transportConfig.getTransportType() == TransportType.BLUETOOTH){
 				_transport = new BTTransport(this,((BTTransportConfig)transportConfig).getKeepSocketActive());
 			}
 			else if (transportConfig.getTransportType() == TransportType.TCP)
 			{
-                _transport = new TCPTransport((TCPTransportConfig) transportConfig, this);
-            } else if (transportConfig.getTransportType() == TransportType.USB) {
-                _transport = new USBTransport((USBTransportConfig) transportConfig, this);
-            }
+				_transport = new TCPTransport((TCPTransportConfig) transportConfig, this);
+			} else if (transportConfig.getTransportType() == TransportType.USB) {
+				_transport = new USBTransport((USBTransportConfig) transportConfig, this);
+			}
+			if (_transport != null) {
+				DebugTool.logInfo("SdlConnection _transport is " + _transport.getClass().getName());
+			}
 		}
-		
+
 		// Initialize the protocol
 		synchronized(PROTOCOL_REFERENCE_LOCK) {
 			// Ensure protocol is null
 			if (_protocol != null) {
 				_protocol = null;
 			}
-			
+
 			_protocol = new WiProProtocol(this);
 		}
 	}
-	
+
 	public AbstractProtocol getWiProProtocol(){
 		return _protocol;
 	}
-	
 
-	
-	
+	/**
+	 * Get the component name, which is corresponding to the given transportType.
+	 * @param list
+	 * @param transportType
+	 * @return ComponentName
+	 */
+	private ComponentName getServiceComponentFromList(List<ComponentName> list, TransportType transportType) {
+		for (ComponentName service: list) {
+			if (transportType == TransportType.MULTIPLEX) {
+				if (service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)) {
+					return service;
+				}
+			} else if (transportType == TransportType.MULTIPLEX_AOA) {
+				if (service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
+					return service;
+				}
+			}
+		}
+		return null;
+	}
+
 	private void closeConnection(boolean willRecycle, byte rpcSessionID, int sessionHashId) {
 		synchronized(PROTOCOL_REFERENCE_LOCK) {
 
@@ -163,47 +203,47 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 		}
 	}
 	}
-		
-	
+
+
 	public void startTransport() throws SdlException {
 		_transport.openConnection();
 	}
-	
+
 	public Boolean getIsConnected() {
-		
+
 		// If _transport is null, then it can't be connected
 		if (_transport == null) {
 			return false;
 		}
-		
+
 		return _transport.getIsConnected();
 	}
-	
+
 	public String getBroadcastComment() {
-		
+
 		if (_transport == null) {
 			return "";
 		}
-		
+
 		return _transport.getBroadcastComment();
 	}
-	
+
 	public void sendMessage(ProtocolMessage msg) {
 		if(_protocol != null)
 			_protocol.SendMessage(msg);
 	}
-	
+
 	void startHandShake() {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
 				_protocol.StartProtocolSession(SessionType.RPC);
 			}
 		}
-	}	
-	
+	}
+
 	@Override
 	public void onTransportPacketReceived(SdlPacket packet) {
-		// Send bytes to protocol to be interpreted 
+		// Send bytes to protocol to be interpreted
 		synchronized(PROTOCOL_REFERENCE_LOCK) {
 			if (_protocol != null) {
 				_protocol.handlePacketReceived(packet);
@@ -215,7 +255,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	public void onTransportConnected() {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
-				boolean shouldRequestSession = _transport !=null  && _transport.getTransportType()== TransportType.MULTIPLEX;
+				boolean shouldRequestSession = _transport !=null  && (_transport.getTransportType()== TransportType.MULTIPLEX || _transport.getTransportType() == TransportType.MULTIPLEX_AOA);
 					for (SdlSession s : listenerList) {
 						if (s.getSessionId() == 0) {
 							if(shouldRequestSession){
@@ -227,7 +267,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				}
 			}
 	}
-	
+
 	@Override
 	public void onTransportDisconnected(String info) {
 		// Pass directly to connection listener
@@ -242,14 +282,14 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	@Override
 	public void onProtocolMessageBytesToSend(SdlPacket packet) {
-		// Protocol has packaged bytes to send, pass to transport for transmission 
+		// Protocol has packaged bytes to send, pass to transport for transmission
 		synchronized(TRANSPORT_REFERENCE_LOCK) {
 			if (_transport != null) {
 				_transport.sendBytes(packet);
 			}
 		}
 	}
-	
+
 	@Override
 	public void onProtocolMessageReceived(ProtocolMessage msg) {
 		_connectionListener.onProtocolMessageReceived(msg);
@@ -277,18 +317,18 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	public void onProtocolError(String info, Exception e) {
 		_connectionListener.onProtocolError(info, e);
 	}
-	
+
 	/**
 	 * Gets type of transport currently used by this connection.
-	 * 
+	 *
 	 * @return One of TransportType enumeration values.
-	 * 
+	 *
 	 * @see TransportType
 	 */
 	public TransportType getCurrentTransportType() {
 		return _transport.getTransportType();
 	}
-	
+
 	public void startService (SessionType sessionType, byte sessionID, boolean isEncrypted) {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
@@ -296,7 +336,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			}
 		}
 	}
-	
+
 	public void endService (SessionType sessionType, byte sessionID) {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
@@ -305,31 +345,31 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 		}
 	}
 	void registerSession(SdlSession registerListener) throws SdlException {
-		boolean didAdd = listenerList.addIfAbsent(registerListener);	
+		boolean didAdd = listenerList.addIfAbsent(registerListener);
 		if (!this.getIsConnected()) {
 			this.startTransport();
 		} else {
-			if(didAdd && _transport !=null  && _transport.getTransportType()== TransportType.MULTIPLEX){ //If we're connected we can request the extra session now
+			if(didAdd && _transport !=null  && (_transport.getTransportType()== TransportType.MULTIPLEX || _transport.getTransportType() == TransportType.MULTIPLEX_AOA)){ //If we're connected we can request the extra session now
 				((MultiplexTransport)_transport).requestNewSession();
 			}
 			this.startHandShake();
 		}
 	}
-	
+
 	public void sendHeartbeat(SdlSession mySession) {
 		if(_protocol != null && mySession != null)
 			_protocol.SendHeartBeat(mySession.getSessionId());
-	}	
-	
+	}
+
 	public void unregisterSession(SdlSession registerListener) {
 		boolean didRemove = listenerList.remove(registerListener);
 		if(didRemove && _transport !=null  && _transport.getTransportType()== TransportType.MULTIPLEX){ //If we're connected we can request the extra session now
 			((MultiplexTransport)_transport).removeSession(registerListener.getSessionId());
-		}		
+		}
 		closeConnection(listenerList.size() == 0, registerListener.getSessionId(), registerListener.getSessionHashId());
 	}
 
-	
+
 	public SdlSession findSessionById(byte id) {
 			for (SdlSession listener : listenerList) {
 				if (listener.getSessionId() == id) {
@@ -337,8 +377,8 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				}
 			}
 		return null;
-	}	
-	
+	}
+
 	private class InternalMsgDispatcher implements ISdlConnectionListener {
 
 		@Override
@@ -376,7 +416,8 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			//If there's an error with the transport we want to make sure we clear out any reference to it held by the static list in sessions
 			SdlSession.removeConnection(SdlConnection.this);
 			//If we are erroring out to go into legacy mode, lets cache our multiplexing
-			if(isLegacyModeEnabled() && _transport!=null && TransportType.MULTIPLEX.equals(_transport.getTransportType())){
+			if(isLegacyModeEnabled() && _transport!=null &&
+					(TransportType.MULTIPLEX.equals(_transport.getTransportType()) || TransportType.MULTIPLEX_AOA.equals(_transport.getTransportType()))){
 				MultiplexTransport multi = ((MultiplexTransport)_transport);
 				cachedMultiConfig = multi.getConfig();
 				cachedMultiConfig.setService(null); //Make sure we're clearning this out
@@ -406,7 +447,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 					break;
 				}
 			}
-			
+
 			if (sessionType.equals(SessionType.NAV) || sessionType.equals(SessionType.PCM) || isEncrypted){
 				SdlSession session = findSessionById(sessionID);
 				if (session != null) {
@@ -437,7 +478,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			SdlSession session = findSessionById(sessionID);
 			if (session != null) {
 				session.onProtocolSessionStartedNACKed(sessionType, sessionID, version, correlationID);
-			}			
+			}
 		}
 
 		@Override
@@ -453,7 +494,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			SdlSession session = findSessionById(sessionID);
 			if (session != null) {
 				session.onProtocolSessionEndedNACKed(sessionType, sessionID, correlationID);
-			}			
+			}
 			}
 
 		@Override
@@ -462,31 +503,31 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			if (session != null) {
 				session.onProtocolServiceDataACK(serviceType, dataSize, sessionID);
 			}
-		}			
+		}
 	}
-		
+
 	public int getRegisterCount() {
 		return listenerList.size();
 	}
-	
+
 	@Override
 	public void onProtocolHeartbeat(SessionType sessionType, byte sessionID) {
     	SdlSession mySession = findSessionById(sessionID);
     	if (mySession == null) return;
-    	
+
     	if (mySession._outgoingHeartbeatMonitor != null) {
     		mySession._outgoingHeartbeatMonitor.heartbeatReceived();
         }
     	if (mySession._incomingHeartbeatMonitor != null) {
     		mySession._incomingHeartbeatMonitor.heartbeatReceived();
-        }		
+        }
 	}
-    
+
 	@Override
     public void onProtocolHeartbeatACK(SessionType sessionType, byte sessionID) {
     	SdlSession mySession = findSessionById(sessionID);
     	if (mySession == null) return;
-    	
+
     	if (mySession._outgoingHeartbeatMonitor != null) {
     		mySession._outgoingHeartbeatMonitor.heartbeatACKReceived();
         }
@@ -497,10 +538,10 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
     @Override
     public void onResetOutgoingHeartbeat(SessionType sessionType, byte sessionID){
-    	
+
     	SdlSession mySession = findSessionById(sessionID);
     	if (mySession == null) return;
-    	
+
     	if (mySession._outgoingHeartbeatMonitor != null) {
     		mySession._outgoingHeartbeatMonitor.notifyTransportActivity();
         }
@@ -508,10 +549,10 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
     @Override
     public void onResetIncomingHeartbeat(SessionType sessionType, byte sessionID){
-    	
+
     	SdlSession mySession = findSessionById(sessionID);
     	if (mySession == null) return;
-    	
+
     	if (mySession._incomingHeartbeatMonitor != null) {
     		mySession._incomingHeartbeatMonitor.notifyTransportActivity();
         }
@@ -519,18 +560,18 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	public void forceHardwareConnectEvent(TransportType type){
 		if(_transport == null){
-			Log.w(TAG, "Unable to force connect, transport was null!");
+			DebugTool.logWarning("Unable to force connect, transport was null!");
 			return;
 		}
 		if(isLegacyModeEnabled()){//We know we should no longer be in legacy mode for future connections, so lets clear out that flag
-			enableLegacyMode(false,null);	
+			enableLegacyMode(false,null);
 		}
-		if(_transport!=null && (_transport.getTransportType()==TransportType.MULTIPLEX)){ //This is only valid for the multiplex connection
+		if(_transport!=null && (_transport.getTransportType()==TransportType.MULTIPLEX || _transport.getTransportType() == TransportType.MULTIPLEX_AOA)){ //This is only valid for the multiplex connection
 			MultiplexTransport multi = ((MultiplexTransport)_transport);
 			MultiplexTransportConfig config = multi.getConfig();
 			ComponentName tempCompName = SdlBroadcastReceiver.consumeQueuedRouterService();
 			if(config.getService() != null && config.getService().equals(tempCompName)){ //If this is the same service that just connected that we are already looking at. Attempt to reconnect
-				if(!multi.getIsConnected() && multi.isDisconnecting() ){ //If we aren't able to force a connection it means the 
+				if(!multi.getIsConnected() && multi.isDisconnecting() ){ //If we aren't able to force a connection it means the
 					_transport = new MultiplexTransport(config,this);
 					try {
 						startTransport();
@@ -540,7 +581,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				}
 			}else if(tempCompName!=null){
 				//We have a conflicting service request
-				Log.w(TAG, "Conflicting services. Disconnecting from current and connecting to new");
+				DebugTool.logWarning("Conflicting services. Disconnecting from current and connecting to new");
 				//Log.w(TAG, "Old service " + config.getService().toShortString());
 				//Log.w(TAG, "New Serivce " + tempCompName.toString());
 				multi.disconnect();
@@ -551,18 +592,18 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				} catch (SdlException e) {
 					e.printStackTrace();
 				}
-				
+
 			}
-		}else if(_transport.getTransportType()==TransportType.BLUETOOTH 
+		}else if(_transport.getTransportType()==TransportType.BLUETOOTH
 				&& !_transport.getIsConnected()){
 			if(cachedMultiConfig!=null){
 				//We are in legacy mode, but just received a force connect. The router service should never be pointing us here if we are truely in legacy mode
 				ComponentName tempCompName = SdlBroadcastReceiver.consumeQueuedRouterService();
 				RouterServiceValidator vlad = new RouterServiceValidator(cachedMultiConfig.getContext(),tempCompName);
-				if(vlad.validate()){
+				if(vlad.validate(_transport.getTransportType())){
 					cachedMultiConfig.setService(tempCompName);
 					//We are not connected yet so we should be able to close down
-					_transport.disconnect(); //This will force us into the 
+					_transport.disconnect(); //This will force us into the
 				}else{
 					//Log.d(TAG, "Router service not trusted during force connect. Ignoring.");
 					return;
@@ -572,12 +613,12 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				//_transport.disconnect();
 				return;
 			}
-			Log.w(TAG, "Using own transport, but not connected. Attempting to join multiplexing");		
+			DebugTool.logWarning("Using own transport, but not connected. Attempting to join multiplexing");
 		}else{
-			Log.w(TAG, "Currently in legacy mode connected to own transport service. Nothing will take place on trnasport cycle");	
+			DebugTool.logWarning("Currently in legacy mode connected to own transport service. Nothing will take place on trnasport cycle");
 		}
 	}
-	
+
 	public static void enableLegacyMode(boolean enable, TransportType type){
 		synchronized(TRANSPORT_REFERENCE_LOCK) {
 			if(enable){
@@ -592,12 +633,12 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			return (legacyTransportRequest!=null);
 		}
 	}
-    
+
 	@Override
 	public void onProtocolSessionEndedNACKed(SessionType sessionType,
 			byte sessionID, String correlationID) {
 		_connectionListener.onProtocolSessionEndedNACKed(sessionType, sessionID, correlationID);
-		
+
 	}
 
 	@Override

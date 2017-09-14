@@ -41,8 +41,10 @@ public class TransportConstants {
 	public static final String ENABLE_LEGACY_MODE_EXTRA 					= "ENABLE_LEGACY_MODE_EXTRA";
 	
 	public static final String HARDWARE_DISCONNECTED						= "hardware.disconect";
-	public static final String HARDWARE_CONNECTED							= "hardware.connected";	
-	
+	public static final String HARDWARE_CONNECTED							= "hardware.connected";
+	public static final String HARDWARE_CONNECTED_AOA						= "hardware.connected.aoa"; // used only for AOA
+	public static final String HARDWARE_DISCONNECTED_AOA					= "hardware.disconnected.aoa"; // ditto
+
 	public static final String SEND_PACKET_TO_APP_LOCATION_EXTRA_NAME 		= "senderintent";
 	public static final String SEND_PACKET_TO_ROUTER_LOCATION_EXTRA_NAME 	= "routerintent";
 
@@ -53,6 +55,9 @@ public class TransportConstants {
 
 
 	public static final String PING_ROUTER_SERVICE_EXTRA 						= "ping.router.service";
+
+	public static final String ROUTER_TRANSPORT_TYPE                            = "router.transport.type";
+	public static final String AOA_ROUTER_OPEN_ACCESSORY                        = "sdl.router.openaccessory";
 
 	/**
 	 * This class houses all important router service versions
@@ -165,7 +170,11 @@ public class TransportConstants {
      * Command to have router service to send a packet
      */
 	public static final int ROUTER_SEND_PACKET 											= 0x20;
-	
+
+	// AOA Router message
+	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT 							= 0x30;
+	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT_RESPONSE					= 0x31;
+	public static final int ROUTER_REQUEST_USB_ATTACHED									= 0x32;
 
 	
 	//response

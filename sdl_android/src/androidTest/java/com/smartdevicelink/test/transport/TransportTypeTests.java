@@ -27,6 +27,7 @@ public class TransportTypeTests extends TestCase {
 		String testInvalid   	= "INVALID";
 		String testBluetooth 	= "BLUETOOTH";
 		String testMultiplexing = "MULTIPLEX";
+		String testMultiplexAoa = "MULTIPLEX_AOA";
 		
 		try {
 			// Comparison Values
@@ -34,12 +35,14 @@ public class TransportTypeTests extends TestCase {
 			TransportType expectedUsbEnum        	= TransportType.USB;
 			TransportType expectedBluetoothEnum  	= TransportType.BLUETOOTH;
 			TransportType expectedMultiplexingEnum  = TransportType.MULTIPLEX;
+			TransportType expectedMultiplexAoaEnum  = TransportType.MULTIPLEX_AOA;
 			
 			List<TransportType> expectedEnumList = new ArrayList<TransportType>();
 			expectedEnumList.add(TransportType.BLUETOOTH);
 			expectedEnumList.add(TransportType.TCP);
 			expectedEnumList.add(TransportType.USB);
 			expectedEnumList.add(TransportType.MULTIPLEX);
+			expectedEnumList.add(TransportType.MULTIPLEX_AOA);
 			
 			TransportType actualNullEnum       		= TransportType.valueForString(null);
 			TransportType actualTcpEnum        		= TransportType.valueForString(testTcp);
@@ -47,6 +50,7 @@ public class TransportTypeTests extends TestCase {
 			TransportType actualInvalidEnum    		= TransportType.valueForString(testInvalid);
 			TransportType actualBluetoothEnum  		= TransportType.valueForString(testBluetooth);
 			TransportType actualMultiplexingEnum 	= TransportType.valueForString(testMultiplexing);
+			TransportType actualMultiplexAoaEnum    = TransportType.valueForString(testMultiplexAoa);
 
 			List<TransportType> actualEnumList = Arrays.asList(TransportType.values());
 			
@@ -55,6 +59,7 @@ public class TransportTypeTests extends TestCase {
 			assertEquals(Test.MATCH, expectedUsbEnum, actualUsbEnum);
 			assertEquals(Test.MATCH, expectedBluetoothEnum, actualBluetoothEnum);
 			assertEquals(Test.MATCH, expectedMultiplexingEnum, actualMultiplexingEnum);
+			assertEquals(Test.MATCH, expectedMultiplexAoaEnum, actualMultiplexAoaEnum);
 			assertTrue(Test.ARRAY, expectedEnumList.containsAll(actualEnumList) && actualEnumList.containsAll(expectedEnumList));
 			
 			// Invalid/Null Tests

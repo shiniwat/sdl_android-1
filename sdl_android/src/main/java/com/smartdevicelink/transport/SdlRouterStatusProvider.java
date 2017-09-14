@@ -14,6 +14,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
@@ -75,11 +76,18 @@ public class SdlRouterStatusProvider {
 		this.flags = flags;
 	}
 	public void checkIsConnected(){
-		if(!AndroidTools.isServiceExported(context,routerService) || !bindToService()){
-			//We are unable to bind to service
-			cb.onConnectionStatusUpdate(false, routerService, context);
-			unBindFromService();
-		}
+		// We cannot bindService from worker thread; so force this in main thread.
+		Handler handler = new Handler(Looper.getMainLooper());
+		handler.post(new Runnable() {
+			@Override
+			public void run() {
+				if(!AndroidTools.isServiceExported(context,routerService) || !bindToService()){
+					//We are unable to bind to service
+					cb.onConnectionStatusUpdate(false, routerService, context);
+					unBindFromService();
+				}
+			}
+		});
 	}
 	
 	public void cancel(){

@@ -9,6 +9,7 @@ import android.test.AndroidTestCase;
 import android.util.Log;
 
 import com.smartdevicelink.transport.RouterServiceValidator.TrustedAppStore;
+import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.HttpRequestTask.HttpRequestTaskCallback;
 
 import org.json.JSONArray;
@@ -75,35 +76,35 @@ public class RSVTestCase extends AndroidTestCase {
 	public void testInstalledFrom(){
 		if(liveTest){
 			rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_INSTALLED_FROM_CHECK);
-			assertTrue(rsvp.validate());
+			assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		}
 	}
 	
 	public void testPackageCheck(){
 		if(liveTest){
 			rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_PACKAGE_CHECK);
-			assertTrue(rsvp.validate());
+			assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		}
 	}
 	
 	public void testVersionCheck(){
 		if(liveTest){
 			rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_VERSION_CHECK);
-			assertTrue(rsvp.validate());
+			assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		}
 	}
 	
 	public void testNoFlags(){
 		if(liveTest){
 			rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_NONE);
-			assertTrue(rsvp.validate());
+			assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		}
 	}
 	
 	public void testAllFlags(){
 		if(liveTest){
 			rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_PERFORM_ALL_CHECKS);
-			assertTrue(rsvp.validate());
+			assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		}
 	}
 	
@@ -183,7 +184,7 @@ public class RSVTestCase extends AndroidTestCase {
 		assertFalse(RouterServiceValidator.createTrustedListRequest(mContext, true, null, trustedListCallback));
 		
 		//This should always return true
-		assertTrue(rsvp.validate());
+		assertTrue(rsvp.validate(TransportType.MULTIPLEX));
 		
 	}
 	
@@ -420,12 +421,12 @@ public class RSVTestCase extends AndroidTestCase {
 		// Fail, different package name for context and service and app security setting is not OFF and app is not on trusted list
 		RouterServiceValidatorTest rsvpFail = new RouterServiceValidatorTest(this.mContext, new ComponentName("anything", mContext.getClass().getSimpleName()));
 		rsvpFail.setSecurityLevel(MultiplexTransportConfig.FLAG_MULTI_SECURITY_HIGH);
-		assertFalse(rsvpFail.validate());
+		assertFalse(rsvpFail.validate(TransportType.MULTIPLEX));
 
 		// Success, same package name for context and service
 		RouterServiceValidatorTest rsvpPass = new RouterServiceValidatorTest(this.mContext, new ComponentName(mContext.getPackageName(), mContext.getClass().getSimpleName()));
 		rsvpPass.setSecurityLevel(MultiplexTransportConfig.FLAG_MULTI_SECURITY_HIGH);
-		assertTrue(rsvpPass.validate());
+		assertTrue(rsvpPass.validate(TransportType.MULTIPLEX));
 	}
 
 	 

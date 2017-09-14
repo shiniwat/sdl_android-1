@@ -407,6 +407,7 @@ public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorList
 	
 	public void startSession() throws SdlException {
 		SdlConnection connection = null;
+		Log.d(TAG, "startSession");
 		if (this.transportConfig.shareConnection()) {
 			 connection = findTheProperConnection(this.transportConfig);
 			

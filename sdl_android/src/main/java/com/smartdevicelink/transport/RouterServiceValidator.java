@@ -24,6 +24,8 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.util.Log;
 
+import com.smartdevicelink.transport.enums.TransportType;
+import com.smartdevicelink.util.DebugTool;
 import com.smartdevicelink.util.HttpRequestTask;
 import com.smartdevicelink.util.HttpRequestTask.HttpRequestTaskCallback;
 
@@ -82,26 +84,30 @@ public class RouterServiceValidator {
 	private boolean inDebugMode = false;
 	@SuppressWarnings("unused")
 	private static boolean pendingListRefresh = false;
-	
-	private ComponentName service;//This is how we can save different routers over another in a waterfall method if we choose to.
+
+	private List<ComponentName> services;//This is how we can save different routers over another in a waterfall method if we choose to.
 
 	private static int securityLevel = -1;
 	
 	public RouterServiceValidator(Context context){
 		this.context = context;
 		inDebugMode = inDebugMode();
+		services = new ArrayList<ComponentName>();
 	}
 	
 	public RouterServiceValidator(Context context, ComponentName service){
 		this.context = context;
 		inDebugMode = inDebugMode();
-		this.service = service;
+		services = new ArrayList<ComponentName>();
+		if (service != null) {
+			services.add(service);
+		}
 	}
 	/**
 	 * Main function to call to ensure we are connecting to a validated router service
 	 * @return whether or not the currently running router service can be trusted.
 	 */
-	public boolean validate(){
+	public boolean validate(TransportType transportType){
 		
 		if(securityLevel == -1){
 			securityLevel = getSecurityLevel(context);
@@ -114,57 +120,65 @@ public class RouterServiceValidator {
 		PackageManager pm = context.getPackageManager();
 		//Grab the package for the currently running router service. We need this call regardless of if we are in debug mode or not.
 		String packageName = null;
-		
-		if(this.service != null){
-			Log.d(TAG, "Supplied service name of " + this.service.getClassName());
-			if(!isServiceRunning(context,this.service)){
-				//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
-				service = null;
-				Log.w(TAG, "Supplied service is not actually running.");
-			} else {
-				// If the running router service is created by this app, the validation is good by default
-				if (this.service.getPackageName().equals(context.getPackageName())) {
-					return true;
-				}
-			}
-		}
-		if(this.service == null){
-			this.service= componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
-			if(this.service == null){ //if this is still null we know there is no service running so we can return false
-				wakeUpRouterServices();
-				return false;
-			}
-		}
-		
-		//Log.d(TAG, "Checking app package: " + service.getClassName());
-		packageName = this.appPackageForComponentName(service, pm);
-		
 
-		if(packageName!=null){//Make sure there is a service running
-			if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
-				if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
-					return true;
+		if(this.services.size() > 0){
+			for (ComponentName service : services) {
+				Log.d(TAG, "Supplied service name of " + service.getClassName());
+				if(!isServiceRunning(context,service)){
+					//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
+					this.services.remove(service);
+					DebugTool.logWarning("Supplied service is not actually running.");
 				}
 			}
-		}//No running service found. Might need to attempt to start one
+		}
+		if(this.services.size() == 0){
+			this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
+			if(this.services.size() == 0){ //if this is still null we know there is no service running so we can return false
+				wakeUpRouterServices(transportType);
+				// @REVIEW: don't we have to return true in this case?
+				return true;//false;
+			}
+		}
+
+		for (ComponentName service : services) {
+			//Log.d(TAG, "Checking app package: " + service.getClassName());
+			packageName = this.appPackageForComponentName(service, pm);
+
+
+			if(packageName!=null){//Make sure there is a service running
+				if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
+					if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
+						return true;
+					}
+				}
+			}//No running service found. Might need to attempt to start one
+		}
 		//TODO spin up a known good router service
-		wakeUpRouterServices();
+		wakeUpRouterServices(transportType);
 		return false;
 	}
 
 	/**
 	 * This will ensure that all router services are aware that there are no valid router services running and should start up 
 	 */
-	private void wakeUpRouterServices(){
-		if(BluetoothAdapter.getDefaultAdapter()!=null && BluetoothAdapter.getDefaultAdapter().isEnabled()){
+	private void wakeUpRouterServices(TransportType transportType){
+		DebugTool.logInfo("wakeUpRouterService transportType=" + transportType.toString());
+		if(transportType == TransportType.MULTIPLEX && BluetoothAdapter.getDefaultAdapter()!=null && BluetoothAdapter.getDefaultAdapter().isEnabled()){
 			Intent intent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
+			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
+			context.sendBroadcast(intent);
+		} else if (transportType == TransportType.MULTIPLEX_AOA && SdlAoaRouterService.shouldServiceRemainOpen(this.context)) {
+			Intent intent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
+			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
+			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
 			context.sendBroadcast(intent);
 		}
 	}
-	public ComponentName getService(){
-		return this.service;
+	public List<ComponentName> getServices(){
+		return this.services;
 	}
+
 
 	private boolean shouldOverrideVersionCheck(){
 		return (this.inDebugMode && ((this.flags & FLAG_DEBUG_VERSION_CHECK) != FLAG_DEBUG_VERSION_CHECK));
@@ -218,26 +232,30 @@ public class RouterServiceValidator {
 	 * @param context
 	 * @return
 	 */
-	public ComponentName componentNameForServiceRunning(PackageManager pm){
+	public List<ComponentName> componentNameForServiceRunning(PackageManager pm){
 		if(context==null){
-			return null;
+			return new ArrayList<ComponentName>();
 		}
 		ActivityManager manager = (ActivityManager) context.getSystemService("activity");
 		//PackageManager pm = context.getPackageManager();
-		
-		
+
+		List<ComponentName> list = new ArrayList<ComponentName>();
 		for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
 			//Log.d(TAG, service.service.getClassName());
 			//We will check to see if it contains this name, should be pretty specific
-			if ((service.service.getClassName()).toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)){ 
+			if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)){
 				//this.service = service.service; //This is great
 				if(service.started && service.restarting==0){ //If this service has been started and is not crashed
-					return service.service; //appPackageForComponenetName(service.service,pm);
+					list.add(service.service); //appPackageForComponenetName(service.service,pm);
+				}
+			} else if (service.service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
+				if(service.started && service.restarting==0){ //If this service has been started and is not crashed
+					list.add(service.service); //appPackageForComponenetName(service.service,pm);
 				}
 			}
-		}			
+		}
 
-		return null;
+		return list;
 	}
 	
 	/**

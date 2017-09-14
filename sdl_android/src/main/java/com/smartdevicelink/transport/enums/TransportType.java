@@ -17,7 +17,14 @@ public enum TransportType {
 	 * Transport type is TCP.
 	 */
 	TCP,
-	USB;
+
+	/**
+	 * Transport type is USB and multiplex'ed USB AOA.
+	 */
+	USB,
+	MULTIPLEX_AOA,
+	// **/;
+	;
 	
 	public static TransportType valueForString(String value) {
 		try{

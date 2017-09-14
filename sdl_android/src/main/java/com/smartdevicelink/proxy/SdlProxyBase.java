@@ -97,6 +97,7 @@ import com.smartdevicelink.trace.SdlTrace;
 import com.smartdevicelink.trace.TraceDeviceInfo;
 import com.smartdevicelink.trace.enums.InterfaceActivityDirection;
 import com.smartdevicelink.transport.BaseTransportConfig;
+import com.smartdevicelink.transport.SdlAoaRouterService;
 import com.smartdevicelink.transport.SiphonServer;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.DebugTool;
@@ -110,7 +111,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 	
 	private SdlSession sdlSession = null;
 	private proxyListenerType _proxyListener = null;
-	
+
 	protected Service _appService = null;
 	private String sPoliciesURL = ""; //for testing only
 
@@ -557,6 +558,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		}
 		
 		_proxyListener = listener;
+		DebugTool.logInfo("proxyListener being set");
 		
 		// Get information from sdlProxyConfigurationResources
 		if (sdlProxyConfigurationResources != null) {
@@ -751,6 +753,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		sendIntent.putExtra("COMMENT10", "");
 		sendIntent.putExtra("DATA", "");
 		sendIntent.putExtra("SHOW_ON_UI", true);
+		sendIntent.putExtra("TRANSPORT_CONFIG", _transportConfig.getClass().getName());
 		return sendIntent;
 	}
 	private void updateBroadcastIntent(Intent sendIntent, String sKey, String sValue)
@@ -1189,17 +1192,51 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		synchronized(CONNECTION_REFERENCE_LOCK) {
 			this.sdlSession = SdlSession.createSession(_wiproVersion,_interfaceBroker, _transportConfig);	
 		}
-		
-		synchronized(CONNECTION_REFERENCE_LOCK) {
-			this.sdlSession.startSession();
-				sendTransportBroadcast();
+
+		if (!isTransportValid()) {
+			DebugTool.logInfo("isTransportValid false");
+			return;
+		}
+
+		// Router service may take some time for up and running.
+		// Slightly defer starting session
+		Handler handler = new Handler(Looper.getMainLooper());
+		handler.postDelayed(new Runnable() {
+			@Override
+			public void run() {
+				synchronized(CONNECTION_REFERENCE_LOCK) {
+					forceOnConnected(false);
+					sendTransportBroadcast();
+				}
 			}
+		}, 0);
 	}
+
+	private boolean isTransportValid() {
+		Service myService = null;
+		if (_proxyListener != null && _proxyListener instanceof Service)
+		{
+			myService = (Service) _proxyListener;
+		}
+		else if (_appService != null)
+		{
+			myService = _appService;
+		}
+		if (myService != null) {
+			if (_transportConfig.getTransportType() == TransportType.MULTIPLEX_AOA) {
+				if (!SdlAoaRouterService.shouldServiceRemainOpen(myService.getApplicationContext())) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
 	/**
 	 * This method will fake the multiplex connection event
 	 * @param action
 	 */
-	public void forceOnConnected(){
+	public void forceOnConnected(boolean sendBTConnected){
 		synchronized(CONNECTION_REFERENCE_LOCK) {
 			if (sdlSession != null) {
 				if(sdlSession.getSdlConnection()==null){ //There is an issue when switching from v1 to v2+ where the connection is closed. So we restart the session during this call.
@@ -1209,7 +1246,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						e.printStackTrace();
 					}
 				}
-				sdlSession.getSdlConnection().forceHardwareConnectEvent(TransportType.BLUETOOTH);
+				if (sendBTConnected) {
+					sdlSession.getSdlConnection().forceHardwareConnectEvent(TransportType.BLUETOOTH);
+				}
 				
 			}
 		}
@@ -1478,7 +1517,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						final Hashtable<String, Object> mhash = JsonRPCMarshaller.unmarshall(message.getData());
 						hash = mhash;
 					}
-					handleRPCMessage(hash);							
+					if (_proxyListener != null) {
+						handleRPCMessage(hash);
+					}
 				} catch (final Exception excp) {
 					DebugTool.logError("Failure handling protocol message: " + excp.toString(), excp);
 					passErrorToProxyListener("Error handing incoming protocol message.", excp);
@@ -1535,6 +1576,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 	}
 	
 	void dispatchInternalMessage(final InternalProxyMessage message) {
+		if (_proxyListener == null) {
+			// Too early -- cannot dispatch message.
+			return;
+		}
 		try{
 			if (message.getFunctionName().equals(InternalProxyMessage.OnProxyError)) {
 				final OnError msg = (OnError)message;			
@@ -1638,7 +1683,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		// with an error on the internalMessageDispatcher, we have no other reliable way of 
 		// communicating with the application.
 		notifyProxyClosed("Proxy callback dispatcher is down. Proxy instance is invalid.", e, SdlDisconnectedReason.GENERIC_ERROR);
-		_proxyListener.onError("Proxy callback dispatcher is down. Proxy instance is invalid.", e);
+		if (_proxyListener != null) {
+			_proxyListener.onError("Proxy callback dispatcher is down. Proxy instance is invalid.", e);
+		}
 	}
 	/************* END Functions used by the Message Dispatching Queues ****************/
 	
@@ -1830,8 +1877,14 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		RPCMessage rpcMsg = new RPCMessage(hash);
 		String functionName = rpcMsg.getFunctionName();
 		String messageType = rpcMsg.getMessageType();
-		
-		if (messageType.equals(RPCMessage.KEY_RESPONSE)) {			
+
+		if (_proxyListener == null) {
+			DebugTool.logError("cannot handleRPCMessage because proxyListener is null");
+			return;
+		}
+
+		//DebugTool.logInfo("handleRPCMessage messagetype=" + messageType);
+		if (messageType.equals(RPCMessage.KEY_RESPONSE)) {
 			SdlTrace.logRPCEvent(InterfaceActivityDirection.Receive, new RPCResponse(rpcMsg), SDL_LIB_TRACE_KEY);
 			
 			// Check to ensure response is not from an internal message (reserved correlation ID)
@@ -1914,27 +1967,29 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						notifyProxyClosed("Unable to register app interface. Review values passed to the SdlProxy constructor. RegisterAppInterface result code: ", 
 								new SdlException("Unable to register app interface. Review values passed to the SdlProxy constructor. RegisterAppInterface result code: " + msg.getResultCode(), SdlExceptionCause.SDL_REGISTRATION_ERROR), SdlDisconnectedReason.SDL_REGISTRATION_ERROR);
 					}
-					
-					if (_callbackToUIThread) {
-						// Run in UI thread
-						_mainUIHandler.post(new Runnable() {
-							@Override
-							public void run() {
-								if (_proxyListener instanceof IProxyListener) {
-									((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
-								} else if (_proxyListener instanceof IProxyListenerALM) {
-									//((IProxyListenerALM)_proxyListener).onRegisterAppInterfaceResponse(msg);
+
+					if (_proxyListener != null) {
+						if (_callbackToUIThread) {
+							// Run in UI thread
+							_mainUIHandler.post(new Runnable() {
+								@Override
+								public void run() {
+									if (_proxyListener instanceof IProxyListener) {
+										((IProxyListener) _proxyListener).onRegisterAppInterfaceResponse(msg);
+									} else if (_proxyListener instanceof IProxyListenerALM) {
+										//((IProxyListenerALM)_proxyListener).onRegisterAppInterfaceResponse(msg);
+									}
+									onRPCResponseReceived(msg);
 								}
-								onRPCResponseReceived(msg);
+							});
+						} else {
+							if (_proxyListener instanceof IProxyListener) {
+								((IProxyListener) _proxyListener).onRegisterAppInterfaceResponse(msg);
+							} else if (_proxyListener instanceof IProxyListenerALM) {
+								//((IProxyListenerALM)_proxyListener).onRegisterAppInterfaceResponse(msg);
 							}
-						});
-					} else {
-						if (_proxyListener instanceof IProxyListener) {
-							((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
-						} else if (_proxyListener instanceof IProxyListenerALM) {
-							//((IProxyListenerALM)_proxyListener).onRegisterAppInterfaceResponse(msg);
+							onRPCResponseReceived(msg);
 						}
-						onRPCResponseReceived(msg);
 					}
 				} else if ((new RPCResponse(hash)).getCorrelationID() == POLICIES_CORRELATION_ID 
 						&& functionName.equals(FunctionID.ON_ENCODED_SYNC_P_DATA.toString())) {

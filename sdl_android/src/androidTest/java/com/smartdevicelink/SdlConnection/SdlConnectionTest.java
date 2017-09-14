@@ -85,7 +85,7 @@ public class SdlConnectionTest extends AndroidTestCase {
 		rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_INSTALLED_FROM_CHECK);
 		MultiplexTransportConfig config = new MultiplexTransportConfig(this.mContext,SdlUnitTestContants.TEST_APP_ID);
 		SdlConnection connection = new SdlConnection(config,rsvp);
-		boolean didValidate = rsvp.validate();
+		boolean didValidate = rsvp.validate(TransportType.MULTIPLEX);
 		if(didValidate){
 			assertEquals(TransportType.MULTIPLEX, connection.getCurrentTransportType());
 		}else{
@@ -100,7 +100,7 @@ public class SdlConnectionTest extends AndroidTestCase {
 		rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_PACKAGE_CHECK);
 		MultiplexTransportConfig config = new MultiplexTransportConfig(this.mContext,SdlUnitTestContants.TEST_APP_ID);
 		SdlConnection connection = new SdlConnection(config,rsvp);
-		boolean didValidate = rsvp.validate();
+		boolean didValidate = rsvp.validate(TransportType.MULTIPLEX);
 		if(didValidate){
 			assertEquals(TransportType.MULTIPLEX, connection.getCurrentTransportType());
 		}else{
@@ -115,7 +115,7 @@ public class SdlConnectionTest extends AndroidTestCase {
 		rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_VERSION_CHECK);
 		MultiplexTransportConfig config = new MultiplexTransportConfig(this.mContext,SdlUnitTestContants.TEST_APP_ID);
 		SdlConnection connection = new SdlConnection(config,rsvp);
-		boolean didValidate = rsvp.validate();
+		boolean didValidate = rsvp.validate(TransportType.MULTIPLEX);
 		if(didValidate){
 			assertEquals(TransportType.MULTIPLEX, connection.getCurrentTransportType());
 		}else{
@@ -129,7 +129,7 @@ public class SdlConnectionTest extends AndroidTestCase {
 		rsvp.setFlags(RouterServiceValidator.FLAG_DEBUG_PERFORM_ALL_CHECKS);
 		MultiplexTransportConfig config = new MultiplexTransportConfig(this.mContext,SdlUnitTestContants.TEST_APP_ID);
 		SdlConnection connection = new SdlConnection(config,rsvp);
-		boolean didValidate = rsvp.validate();
+		boolean didValidate = rsvp.validate(TransportType.MULTIPLEX);
 		if(didValidate){
 			assertEquals(TransportType.MULTIPLEX, connection.getCurrentTransportType());
 		}else{
@@ -177,9 +177,9 @@ public class SdlConnectionTest extends AndroidTestCase {
 			//Grab a currently running router service
 			RouterServiceValidator rsvp2 = new RouterServiceValidator(mContext);
 			rsvp2.setFlags(RouterServiceValidator.FLAG_DEBUG_NONE);
-			assertTrue(rsvp2.validate());
-			assertNotNull(rsvp2.getService());
-			SdlConnectionTestClass.cachedMultiConfig.setService(rsvp2.getService());
+			assertTrue(rsvp2.validate(TransportType.MULTIPLEX));
+			assertNotNull(rsvp2.getServices().get(0));
+			SdlConnectionTestClass.cachedMultiConfig.setService(rsvp2.getServices().get(0));
 			super.onTransportDisconnected(info);
 		}
 

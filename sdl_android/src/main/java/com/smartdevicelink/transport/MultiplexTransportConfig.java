@@ -34,6 +34,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 	String appId;
 	ComponentName service;
 	int securityLevel;
+	TransportType transportType;
 
 	
 
@@ -42,25 +43,31 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 		this.context = context;
 		this.appId = appId;
 		this.securityLevel = FLAG_MULTI_SECURITY_MED;
+		this.transportType = TransportType.MULTIPLEX;
 	}
 
 	public MultiplexTransportConfig(Context context, String appId, int securityLevel) {
 		this.context = context;
 		this.appId = appId;
 		this.securityLevel = securityLevel;
-	}	
+		this.transportType = TransportType.MULTIPLEX;
+	}
 
 	/**
 	 * Overridden abstract method which returns specific type of this transport configuration.
-	 * 
-	 * @return Constant value TransportType.MULTIPLEX. 
+	 *
+	 * @return Either TransportType.MULTIPLEX (Bluetooth) or MULTIPLEX_AOA
 	 * 
 	 * @see TransportType
 	 */
 	public TransportType getTransportType() {
-		return TransportType.MULTIPLEX;
+		return transportType;
 	}
-	
+
+	public void setTransportType(TransportType transportType) {
+		this.transportType = transportType;
+	}
+
 	public Context getContext(){
 		return this.context;
 	}

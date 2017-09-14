@@ -9,6 +9,7 @@ import android.test.AndroidTestCase;
 
 import com.smartdevicelink.test.SdlUnitTestContants;
 import com.smartdevicelink.test.util.DeviceUtil;
+import com.smartdevicelink.transport.enums.TransportType;
 
 public class TransportBrokerTest extends AndroidTestCase {
 	RouterServiceValidator rsvp;
@@ -18,7 +19,7 @@ public class TransportBrokerTest extends AndroidTestCase {
 	protected void setUp() throws Exception {
 		super.setUp();
 		rsvp = new RouterServiceValidator(this.mContext);
-		rsvp.validate();
+		rsvp.validate(TransportType.MULTIPLEX);
 		
 	}
 	
@@ -32,9 +33,9 @@ public class TransportBrokerTest extends AndroidTestCase {
 		if (Looper.myLooper() == null) {
 			Looper.prepare();
 		}
-		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID,rsvp.getService());
+		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID,rsvp.getServices().get(0));
 		if(!DeviceUtil.isEmulator()){ // Cannot perform MBT operations in emulator
-			assertTrue(broker.start());
+			assertTrue(broker.start(TransportType.MULTIPLEX));
 		}
 		broker.stop();
 
@@ -45,7 +46,7 @@ public class TransportBrokerTest extends AndroidTestCase {
 			Looper.prepare();
 		}
 
-		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID,rsvp.getService());
+		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID,rsvp.getServices().get(0));
 
 		if(!DeviceUtil.isEmulator()){ // Cannot perform MBT operations in emulator
 			assertTrue(broker.start());
@@ -78,9 +79,9 @@ public class TransportBrokerTest extends AndroidTestCase {
 		if (Looper.myLooper() == null) {
 			Looper.prepare();
 		}
-		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID, rsvp.getService());
+		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID, rsvp.getServices().get(0));
 		if(!DeviceUtil.isEmulator()){ // Cannot perform MBT operations in emulator
-			assertTrue(broker.start());
+			assertTrue(broker.start(TransportType.MULTIPLEX));
 		}
 
 	}
@@ -90,7 +91,7 @@ public class TransportBrokerTest extends AndroidTestCase {
 			Looper.prepare();
 		}
 
-		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID, rsvp.getService());
+		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID, rsvp.getServices().get(0));
 		Handler handler = new Handler();
 		Message message = new Message();
 		broker.routerServiceMessenger = null;
