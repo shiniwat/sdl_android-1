@@ -76,9 +76,6 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 	private static boolean closing = false;
 	private BroadcastReceiver registerAnInstanceOfSerialServer;
 
-	// @NOTE: set allowNonSdlAoaParameter to true if user app wants to work with non-SDL AOA parameter.
-	// @REVIEW: there might be a better way to make AOA work on specific HU that uses different AOA parameter.
-	public static boolean allowNonSdlAoaParameter = false;
 
 	/* **************************************************************************************************************************************
 	***********************************************  Broadcast Receivers stuff  **************************************************************
@@ -578,15 +575,12 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 		}
 		for (UsbAccessory accessory: accessories) {
 			if (accessory.getManufacturer().equalsIgnoreCase("SDL") && accessory.getModel().equalsIgnoreCase("Core")) {
-				return true;
-			} else if (allowNonSdlAoaParameter) {
 				Log.d(TAG, accessory.toString() + " is allowed in shouldServiceRemainOpen");
-				return true;
 			} else {
-				Log.d(TAG, accessory.toString() + " ignored in shouldServiceRemainOpen");
+				Log.d(TAG, accessory.toString() + " does not look like SDL AOA params, but we allow it so far.");
 			}
 		}
-		return false;
+		return true;
 	}
 
 	// @TODO: processCheck if needed.
