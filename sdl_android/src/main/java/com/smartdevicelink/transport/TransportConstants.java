@@ -172,8 +172,6 @@ public class TransportConstants {
 	public static final int ROUTER_SEND_PACKET 											= 0x20;
 
 	// AOA Router message
-	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT 							= 0x30;
-	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT_RESPONSE					= 0x31;
 	public static final int ROUTER_REQUEST_USB_ATTACHED									= 0x32;
 
 	

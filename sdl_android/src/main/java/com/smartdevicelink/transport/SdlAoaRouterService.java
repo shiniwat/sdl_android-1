@@ -141,15 +141,6 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 			final SdlAoaRouterService service = this.provider.get();
 
 			switch (msg.what) {
-				case TransportConstants.ROUTER_REQUEST_AOA_CLIENT_CONNECT:
-					DebugTool.logInfo("ROUTER_REQUEST_AOA_CLIENT_CONNECT");
-					if(receivedBundle.getBoolean(TransportConstants.CONNECT_AS_CLIENT_BOOLEAN_EXTRA, false)
-							&& !connectAsClient){		//We check this flag to make sure we don't try to connect over and over again. On D/C we should set to false
-						//DebugTool.logInfo("Attempting to connect as bt client");
-						// @TODO: connect as client
-						connectAsClient = true;
-					}
-					//**************** We don't break here so we can let the app register as well
 				case TransportConstants.ROUTER_REGISTER_CLIENT: //msg.arg1 is appId
 					//pingClients();
 					DebugTool.logInfo("ROUTER_REGISTER_CLIENT");
@@ -673,7 +664,6 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 	public void onTransportDisconnected(TransportType type) {
 		super.onTransportDisconnected(type);
 		DebugTool.logInfo("onTransportDisconnected");
-		super.onTransportDisconnected(type);
 		isTransportConnected = false;
 		connectedTransportType = null;
 
