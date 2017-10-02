@@ -49,7 +49,7 @@ public class TransportBrokerTest extends AndroidTestCase {
 		TransportBroker broker = new TransportBroker(mContext, SdlUnitTestContants.TEST_APP_ID,rsvp.getServices().get(0));
 
 		if(!DeviceUtil.isEmulator()){ // Cannot perform MBT operations in emulator
-			assertTrue(broker.start());
+			assertTrue(broker.start(TransportType.MULTIPLEX));
 		}
 		BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
 		if(!DeviceUtil.isEmulator()){ // Cannot perform BT adapter operations in emulator

@@ -124,9 +124,11 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 					if (transportConfig.getTransportType() == TransportType.USB) {
 						enableLegacyMode(true, TransportType.USB);
 						_transport = new USBTransport((USBTransportConfig) transportConfig, this);
-					} else {
+					} else if (transportConfig.getTransportType() == TransportType.BLUETOOTH) {
 						enableLegacyMode(true, TransportType.BLUETOOTH);
 						_transport = new BTTransport(this, true);
+					} else if (transportConfig.getTransportType() == TransportType.TCP) {
+						_transport = new TCPTransport((TCPTransportConfig) transportConfig, this);
 					}
 				}
 			}else if(isLegacyModeEnabled() && legacyTransportRequest == TransportType.BLUETOOTH){
@@ -134,8 +136,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 			}else if(transportConfig.getTransportType() == TransportType.BLUETOOTH){
 				_transport = new BTTransport(this,((BTTransportConfig)transportConfig).getKeepSocketActive());
 			}
-			else if (transportConfig.getTransportType() == TransportType.TCP)
-			{
+			else if (transportConfig.getTransportType() == TransportType.TCP) {
 				_transport = new TCPTransport((TCPTransportConfig) transportConfig, this);
 			} else if (transportConfig.getTransportType() == TransportType.USB) {
 				_transport = new USBTransport((USBTransportConfig) transportConfig, this);
@@ -363,7 +364,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	public void unregisterSession(SdlSession registerListener) {
 		boolean didRemove = listenerList.remove(registerListener);
-		if(didRemove && _transport !=null  && _transport.getTransportType()== TransportType.MULTIPLEX){ //If we're connected we can request the extra session now
+		if(didRemove && _transport !=null  && (_transport.getTransportType()== TransportType.MULTIPLEX || _transport.getTransportType() == TransportType.MULTIPLEX_AOA)){ //If we're connected we can request the extra session now
 			((MultiplexTransport)_transport).removeSession(registerListener.getSessionId());
 		}
 		closeConnection(listenerList.size() == 0, registerListener.getSessionId(), registerListener.getSessionHashId());

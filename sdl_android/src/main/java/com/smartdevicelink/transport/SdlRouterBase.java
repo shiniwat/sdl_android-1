@@ -713,10 +713,10 @@ abstract public class SdlRouterBase extends Service {
 		}
 		if(notification == null){
 			Log.e(TAG, "Notification was null");
+		} else {
+			startForeground(FOREGROUND_SERVICE_ID, notification);
+			isForeground = true;
 		}
-		startForeground(FOREGROUND_SERVICE_ID, notification);
-		isForeground = true;
-
 	}
 
 	void exitForeground(){

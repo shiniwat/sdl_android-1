@@ -11,6 +11,7 @@ import com.smartdevicelink.test.SdlUnitTestContants;
 import com.smartdevicelink.transport.BaseTransportConfig;
 import com.smartdevicelink.transport.MultiplexTransportConfig;
 import com.smartdevicelink.transport.RouterServiceValidator;
+import com.smartdevicelink.transport.enums.TransportType;
 
 import junit.framework.Assert;
 
@@ -364,9 +365,9 @@ public class WiProProtocolTests extends AndroidTestCase {
 			//Grab a currently running router service
 			RouterServiceValidator rsvp2 = new RouterServiceValidator(mContext);
 			rsvp2.setFlags(RouterServiceValidator.FLAG_DEBUG_NONE);
-			assertTrue(rsvp2.validate());
-			assertNotNull(rsvp2.getService());
-			SdlConnectionTestClass.cachedMultiConfig.setService(rsvp2.getService());
+			assertTrue(rsvp2.validate(TransportType.MULTIPLEX));
+			assertNotNull(rsvp2.getServices().get(0));
+			SdlConnectionTestClass.cachedMultiConfig.setService(rsvp2.getServices().get(0));
 			super.onTransportDisconnected(info);
 		}
 

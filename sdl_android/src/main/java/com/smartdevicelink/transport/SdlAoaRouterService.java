@@ -37,6 +37,7 @@ import android.content.IntentFilter;
 import android.content.pm.ResolveInfo;
 import android.hardware.usb.UsbAccessory;
 import android.hardware.usb.UsbManager;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -400,13 +401,14 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 			String requestType = intent.getAction();//intent.getIntExtra(TransportConstants.ROUTER_BIND_REQUEST_TYPE_EXTRA, TransportConstants.BIND_REQUEST_TYPE_CLIENT);
 			DebugTool.logInfo("onBind: " + requestType);
 			// @TODO: need taking this into account
-			if(false) {//TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT.equals(requestType)){
+			if(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT.equals(requestType)){
+				DebugTool.logWarning("BIND_REQUEST_TYPE_ALT_TRANSPORT is not supported.");
 				//if(0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)){ //Only allow alt transport in debug mode
 				//	return this.altTransportMessenger.getBinder();
 				//}
 			}else if(TransportConstants.BIND_REQUEST_TYPE_CLIENT.equals(requestType)){
 				return this.routerMessenger.getBinder();
-			}else if(TransportConstants.BIND_REQUEST_TYPE_STATUS.equals(requestType)){
+			}else if(TransportConstants.BIND_REQUEST_TYPE_STATUS.equals(requestType)) {
 				return this.routerStatusMessenger.getBinder();
 			}else{
 				DebugTool.logWarning("Uknown bind request type");
@@ -548,7 +550,11 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 		}
 		if (!shouldServiceRemainOpen(this)) {
 			DebugTool.logInfo("shouldServiceRemainOpen false");
-			shutdownService();
+			if (intent.hasExtra("SdlAoaRouterServiceTest")) {
+				DebugTool.logInfo("do NOT shutdown service because of unit test");
+			} else {
+				shutdownService();
+			}
 		} else {
 			DebugTool.logInfo("shouldServiceRemainOpen true");
 			initMuxTransport();
@@ -632,7 +638,10 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 
 		DebugTool.logInfo("onTransportConnected: type=" + type.toString());
 		isTransportConnected = true;
-		enterForeground(android.R.drawable.stat_sys_data_bluetooth); // @TODO change drawable for AOA.
+		// enterForeground only if current thread is main thread
+		if (Looper.myLooper() == Looper.getMainLooper()) {
+			enterForeground(android.R.drawable.stat_notify_sdcard_usb); // @TODO use the right drawable.
+		}
 
 		// packetWriterTaskMaster instance is created onCreate.
 		connectedTransportType = type;
@@ -695,6 +704,9 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 	}
 
 	public void onPacketRead(SdlPacket packet){
+		if (packet == null) {
+			return;
+		}
 		try {
 			//Log.i(TAG, "******** Read packet with header: " +(packet).toString());
 			if(packet.getVersion() == 1){

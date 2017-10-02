@@ -135,8 +135,11 @@ public class RouterServiceValidator {
 			this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
 			if(this.services.size() == 0){ //if this is still null we know there is no service running so we can return false
 				wakeUpRouterServices(transportType);
-				// @REVIEW: don't we have to return true in this case?
-				return true;//false;
+				if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
+					return true;		// AOA Router expects to return true
+				} else {
+					return false;		// BT Router validator needs to return false.
+				}
 			}
 		}
 
