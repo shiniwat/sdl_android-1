@@ -17,6 +17,7 @@ import junit.framework.Assert;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * This is a unit test class for the SmartDeviceLink library project class : 
@@ -38,7 +39,7 @@ public class WiProProtocolTests extends AndroidTestCase {
 		@Override
 		public void onProtocolSessionStarted(SessionType sessionType,byte sessionID, byte version, String correlationID, int hashID,boolean isEncrypted){}
 		@Override
-		public void onProtocolSessionNACKed(SessionType sessionType,byte sessionID, byte version, String correlationID) {}
+		public void onProtocolSessionNACKed(SessionType sessionType,byte sessionID, byte version, String correlationID, List<String> rejectedParams) {}
 		@Override
 		public void onProtocolSessionEnded(SessionType sessionType,byte sessionID, String correlationID) {}
 		@Override
@@ -77,7 +78,7 @@ public class WiProProtocolTests extends AndroidTestCase {
 		@Override
 		public void onProtocolSessionStarted(SessionType sessionType,byte sessionID, byte version, String correlationID, int hashID,boolean isEncrypted){}
 		@Override
-		public void onProtocolSessionNACKed(SessionType sessionType,byte sessionID, byte version, String correlationID) {}
+		public void onProtocolSessionNACKed(SessionType sessionType,byte sessionID, byte version, String correlationID, List<String> rejectedParams) {}
 		@Override
 		public void onProtocolSessionEnded(SessionType sessionType,byte sessionID, String correlationID) {}
 		@Override

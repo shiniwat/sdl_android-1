@@ -304,8 +304,9 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	@Override
 	public void onProtocolSessionNACKed(SessionType sessionType,
-			byte sessionID, byte version, String correlationID) {
-		_connectionListener.onProtocolSessionStartedNACKed(sessionType, sessionID, version, correlationID);
+			byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
+		_connectionListener.onProtocolSessionStartedNACKed(sessionType,
+				sessionID, version, correlationID, rejectedParams);
 	}
 
 	@Override
@@ -475,11 +476,12 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 		@Override
 		public void onProtocolSessionStartedNACKed(SessionType sessionType,
-				byte sessionID, byte version, String correlationID) {
+				byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
 			SdlSession session = findSessionById(sessionID);
 			if (session != null) {
-				session.onProtocolSessionStartedNACKed(sessionType, sessionID, version, correlationID);
-			}
+				session.onProtocolSessionStartedNACKed(sessionType,
+						sessionID, version, correlationID, rejectedParams);
+			}			
 		}
 
 		@Override

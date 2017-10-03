@@ -87,9 +87,13 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 			return;
         }
         
-	    boolean didStart = false;
-	    localRouterClass = defineLocalSdlRouterClass();
-		localAoaRouterClass = defineLocalSdlAoaRouterClass();
+		boolean didStart = false;
+		if (localRouterClass == null){
+			localRouterClass = defineLocalSdlRouterClass();
+		}
+		if (localAoaRouterClass == null) {
+			localAoaRouterClass = defineLocalSdlAoaRouterClass();
+		}
 
 		//This will only be true if we are being told to reopen our SDL service because SDL is enabled
 		if(action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)){
