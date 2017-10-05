@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import android.content.ComponentName;
+import android.os.AsyncTask;
+import android.os.Looper;
 import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
@@ -243,7 +245,21 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 	@Override
 	public void onProtocolMessageBytesToSend(SdlPacket packet) {
-		// Protocol has packaged bytes to send, pass to transport for transmission 
+		if (Thread.currentThread() == Looper.getMainLooper().getThread()) {
+			new AsyncTask<SdlPacket, Void, Void>() {
+				@Override
+				protected Void doInBackground(SdlPacket... params) {
+					onProtocolMessageBytesToSendInternal(params[0]);
+					return null;
+				}
+			}.execute(packet);
+		} else {
+			onProtocolMessageBytesToSendInternal(packet);
+		}
+	}
+
+	private void onProtocolMessageBytesToSendInternal(SdlPacket packet) {
+		// Protocol has packaged bytes to send, pass to transport for transmission
 		synchronized(TRANSPORT_REFERENCE_LOCK) {
 			if (_transport != null) {
 				_transport.sendBytes(packet);
