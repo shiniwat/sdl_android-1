@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -527,7 +528,7 @@ public class TransportBroker {
 			}
 			//Make sure we know where to bind to
 			if(this.routerService==null){ 
-				if(!isRouterServiceRunning(getContext(), type)){//We should be able to ignore this case because of the validation now
+				if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isRouterServiceRunning(getContext(), type)){//We should be able to ignore this case because of the validation now
 					Log.d(TAG,whereToReply + " found no router service. Shutting down.");
 					this.onHardwareDisconnected(null);
 					return false;

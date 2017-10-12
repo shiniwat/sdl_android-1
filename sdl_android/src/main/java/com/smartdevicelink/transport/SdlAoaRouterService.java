@@ -13,7 +13,6 @@
  *   and/or other materials provided with the distribution.
  *
  * * Neither the name of the copyright holder nor the names of its contributors
- *   may be used to endorse or promote products derived from this software
  *   without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -286,6 +285,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 						extraSessionResponse.arg1 = TransportConstants.ROUTER_REQUEST_NEW_SESSION_RESPONSE_FAILED_APP_ID_NOT_INCL;
 					}
 					try {
+						DebugTool.logInfo("reply ROUTER_REQUEST_NEW_SESSION_RESPONSE");
 						msg.replyTo.send(extraSessionResponse); //We do this because we aren't guaranteed to find the correct registeredApp to send the message through
 					} catch (RemoteException e) {
 						e.printStackTrace();
@@ -333,6 +333,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 					}
 					break;
 				case TransportConstants.ROUTER_REQUEST_USB_ATTACHED:
+					DebugTool.logInfo("got ROUTER_REQUEST_USB_ATTACHED message in AoaRouterService");
 					if (msg.arg1 == MultiplexAOATransport.MUX_STATE_CONNECTED) {
 						provider.get().onTransportConnected(TransportType.MULTIPLEX_AOA);
 					}

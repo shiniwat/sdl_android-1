@@ -23,9 +23,17 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.provider.Settings;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.Build;
 import android.util.Log;
+
+import com.smartdevicelink.util.ServiceFinder;
+
+import java.util.Collections;
+import java.util.Comparator;
 
 public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	
@@ -151,10 +159,10 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	    			return;
 	    		}
 	    }
-	    
+	    Log.d(TAG, "Check for local router");
 	    if(localRouterClass!=null){ //If there is a supplied router service lets run some logic regarding starting one
 	    	
-	    	if(!didStart){
+	    	if(!didStart){Log.d(TAG, "attempting to wake up router service");
 				didStart = wakeUpRouterService(context, true,false, TransportType.MULTIPLEX);
 	    	}
 
@@ -218,60 +226,137 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		}
 	}
 
-	private boolean wakeUpRouterService(final Context context, boolean ping, boolean altTransportWake, TransportType transportType){
-		if(!isRouterServiceRunning(context, ping, transportType)){
-			DebugTool.logInfo("wakeUpRouterService but router service is not running. transportType=" + transportType.toString());
-			//If there isn't a service running we should try to start one
-			//The under class should have implemented this....
+	@TargetApi(Build.VERSION_CODES.O)
+	private boolean wakeUpRouterService(final Context context, boolean ping, final boolean altTransportWake, final TransportType transportType){
+		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+			if(!isRouterServiceRunning(context, ping, transportType)){
+				DebugTool.logInfo("wakeUpRouterService but router service is not running. transportType=" + transportType.toString());
+				//If there isn't a service running we should try to start one
+				//The under class should have implemented this....
 
-			//So let's start up our service since no copy is running
-			if (transportType == TransportType.MULTIPLEX && localRouterClass != null) {
-				DebugTool.logInfo("Router service is not running: BT Router is" + localRouterClass.toString());
-				Intent serviceIntent = new Intent(context, localRouterClass);
-				if(altTransportWake){
-					serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
+				//So let's start up our service since no copy is running
+				if (transportType == TransportType.MULTIPLEX && localRouterClass != null) {
+					DebugTool.logInfo("Router service is not running: BT Router is" + localRouterClass.toString());
+					Intent serviceIntent = new Intent(context, localRouterClass);
+					if(altTransportWake){
+						serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
+					}
+					try {
+						// @TODO: suppress BT router.
+						//Log.d(TAG, "suppress BT router");
+						context.startService(serviceIntent);
+					}catch (SecurityException e){
+						Log.e(TAG, "Security exception, process is bad");
+						return false; // Let's exit, we can't start the service
+					}
 				}
-				try {
-					// @TODO: suppress BT router.
-					//Log.d(TAG, "suppress BT router");
-					context.startService(serviceIntent);
-				}catch (SecurityException e){
-					Log.e(TAG, "Security exception, process is bad");
-					return false; // Let's exit, we can't start the service
-				}
-			}
 
-			if (transportType == TransportType.MULTIPLEX_AOA && localAoaRouterClass != null) {
-				DebugTool.logInfo("Router service is not running: AoaRouter is " + localAoaRouterClass.toString());
-				//if (isForegroundApp(context)) {
+				if (transportType == TransportType.MULTIPLEX_AOA && localAoaRouterClass != null) {
+					DebugTool.logInfo("Router service is not running: AoaRouter is " + localAoaRouterClass.toString());
+					//if (isForegroundApp(context)) {
 					if (localAoaRouterClass != null) {
 						Intent aoaRouterIntent = new Intent(context, localAoaRouterClass);
 						ComponentName name = context.startService(aoaRouterIntent);
 						DebugTool.logInfo("startService " + name);
 					}
-				//} else {
-				//	DebugTool.logInfo("do not start service because we are not foreground");
-				//}
-			}
-			return true;
-		}else{
-			DebugTool.logInfo("wakeUpRouterService but router service runs already");
-			if(altTransportWake &&  runningRouterServicePackage !=null && runningRouterServicePackage.size()>0){
-				Intent serviceIntent = new Intent();
-				serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
-				context.startService(serviceIntent);
-				for(ComponentName compName: runningRouterServicePackage){
-					serviceIntent.setComponent(compName);
-					context.startService(serviceIntent);
+					//} else {
+					//	DebugTool.logInfo("do not start service because we are not foreground");
+					//}
 				}
 				return true;
+			}else {
+				DebugTool.logInfo("wakeUpRouterService but router service runs already");
+				if (altTransportWake && runningRouterServicePackage != null && runningRouterServicePackage.size() > 0) {
+					Intent serviceIntent = new Intent();
+					serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
+					context.startService(serviceIntent);
+					for (ComponentName compName : runningRouterServicePackage) {
+						serviceIntent.setComponent(compName);
+						context.startService(serviceIntent);
+					}
+					return true;
+				}
+				return false;
 			}
-			return false;
+		} else { //We are android Oreo or newer
+			ServiceFinder finder = new ServiceFinder(context, context.getPackageName(), new ServiceFinder.ServiceFinderCallback() {
+				@Override
+				public void onComplete(Vector<ComponentName> routerServices) {
+					runningRouterServicePackage = new Vector<ComponentName>();
+					runningRouterServicePackage.addAll(routerServices);
+					if (runningRouterServicePackage.isEmpty()) {
+						//If there isn't a service running we should try to start one
+						//We will try to sort the SDL enabled apps and find the one that's been installed the longest
+						Intent serviceIntent;
+						final PackageManager packageManager = context.getPackageManager();
+						Vector<ResolveInfo> apps = new Vector(AndroidTools.getSdlEnabledApps(context, "").values()); //we want our package
+						if (apps != null && !apps.isEmpty()) {
+							Collections.sort(apps, new Comparator<ResolveInfo>() {
+								@Override
+								public int compare(ResolveInfo resolveInfo, ResolveInfo t1) {
+									try {
+										PackageInfo thisPack = packageManager.getPackageInfo(resolveInfo.activityInfo.packageName, 0);
+										PackageInfo itPack = packageManager.getPackageInfo(t1.activityInfo.packageName, 0);
+										if (thisPack.lastUpdateTime < itPack.lastUpdateTime) {
+											return -1;
+										} else if (thisPack.lastUpdateTime > itPack.lastUpdateTime) {
+											return 1;
+										}
+
+									} catch (PackageManager.NameNotFoundException e) {
+										e.printStackTrace();
+									}
+									return 0;
+								}
+							});
+							String packageName = apps.get(0).activityInfo.packageName;
+							serviceIntent = new Intent();
+							if (transportType.equals(TransportType.MULTIPLEX)) {
+								serviceIntent.setComponent(new ComponentName(packageName, packageName + ".SdlRouterService"));
+							} else if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
+								serviceIntent.setComponent(new ComponentName(packageName, packageName + ".SdlAoaRouterService"));
+							}
+						} else{
+							Log.d(TAG, "No router service running, starting ours");
+							//So let's start up our service since no copy is running
+							serviceIntent = new Intent(context, (transportType.equals(TransportType.MULTIPLEX_AOA)) ? localAoaRouterClass : localRouterClass);
+
+						}
+						if (altTransportWake) {
+							serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
+						}
+						try {
+							serviceIntent.putExtra(TransportConstants.FOREGROUND_EXTRA, true);
+							context.startForegroundService(serviceIntent);
+
+						} catch (SecurityException e) {
+							Log.e(TAG, "Security exception, process is bad");
+						}
+					} else {
+						if (altTransportWake && runningRouterServicePackage != null && runningRouterServicePackage.size() > 0) {
+							wakeRouterServiceAltTransport(context);
+							return;
+						}
+						return;
+					}
+				}
+			});
+			return true;
+		}
+	}
+
+	private void wakeRouterServiceAltTransport(Context context){
+		Intent serviceIntent = new Intent();
+		serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
+		for (ComponentName compName : runningRouterServicePackage) {
+			serviceIntent.setComponent(compName);
+			context.startService(serviceIntent);
 		}
 	}
 
 	/**
-	 * Determines if an instance of the Router Service is currently running on the device. 
+	 * Determines if an instance of the Router Service is currently running on the device.<p>
+	 * <b>Note:</b> This method no longer works on Android Oreo or newer
 	 * @param context A context to access Android system services through.
 	 * @param pingService Set this to true if you want to make sure the service is up and listening to bluetooth
 	 * @return True if a SDL Router Service is currently running, false otherwise.
@@ -281,16 +366,17 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 			Log.e(TAG, "Can't look for router service, context supplied was null");
 			return false;
 		}
-		ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
 		if(runningRouterServicePackage ==null){
 			runningRouterServicePackage = new Vector<ComponentName>();
 		}else{
 			runningRouterServicePackage.clear();
 		}
+		ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+		manager.getRunningAppProcesses();
 		List<RunningServiceInfo> runningServices = null;
-		try{
+		try {
 			runningServices = manager.getRunningServices(Integer.MAX_VALUE);
-		}catch(NullPointerException e){
+		} catch (NullPointerException e) {
 			Log.e(TAG, "Can't get list of running services");
 			return false;
 		}
@@ -316,7 +402,6 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		}
 
 		return runningRouterServicePackage.size() > 0;
-		
 	}
 
 	/**
@@ -339,15 +424,27 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 			// This service could not be started
 		}
 	}
-	
+
 	/**
 	 * This call will reach out to all SDL related router services to check if they're connected. If a the router service is connected, it will react by pinging all clients. This receiver will then
 	 * receive that ping and if the router service is trusted, the onSdlEnabled method will be called. 
 	 * @param context
 	 */
-	public static void queryForConnectedService(Context context, final TransportType transportType){
+	public static void queryForConnectedService(final Context context, final TransportType transportType){
 		//Leverage existing call. Include ping bit
-		requestTransportStatus(context,null,true, transportType);
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+			ServiceFinder finder = new ServiceFinder(context, context.getPackageName(), new ServiceFinder.ServiceFinderCallback() {
+				@Override
+				public void onComplete(Vector<ComponentName> routerServices) {
+					runningRouterServicePackage = new Vector<ComponentName>();
+					runningRouterServicePackage.addAll(routerServices);
+					requestTransportStatus(context, null, true, false, transportType);
+				}
+			});
+
+		}else{
+			requestTransportStatus(context, null, true, true, transportType);
+		}
 	}
 	/**
 	 * If a Router Service is running, this method determines if that service is connected to a device over some form of transport.
@@ -355,10 +452,11 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	 * @param callback Use this callback to find out if the router service is connected or not. 
 	 */
 	public static void requestTransportStatus(Context context, final SdlRouterStatusProvider.ConnectedStatusCallback callback, final TransportType transportType){
-		requestTransportStatus(context,callback,false, transportType);
+		requestTransportStatus(context,callback,false, true, transportType);
 	}
 
-	private static void requestTransportStatus(Context context, final SdlRouterStatusProvider.ConnectedStatusCallback callback, final boolean triggerRouterServicePing, final TransportType transportType){
+	@Deprecated
+	private static void requestTransportStatus(Context context, final SdlRouterStatusProvider.ConnectedStatusCallback callback, final boolean triggerRouterServicePing, final boolean lookForServices, final TransportType transportType){
 		if(context == null){
 			if(callback!=null){
 				callback.onConnectionStatusUpdate(false, null,context);

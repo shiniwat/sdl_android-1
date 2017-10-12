@@ -1,6 +1,5 @@
 package com.smartdevicelink.transport;
 
-import static com.smartdevicelink.proxy.constants.Names.info;
 import static com.smartdevicelink.transport.TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME;
 import static com.smartdevicelink.transport.TransportConstants.FORMED_PACKET_EXTRA_NAME;
 import static com.smartdevicelink.transport.TransportConstants.HARDWARE_DISCONNECTED;
@@ -23,11 +22,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.Manifest;
+
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -731,6 +733,7 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 
 	HashMap<String,ResolveInfo> sdlMultiList ;
 	public void startVersionCheck(){
+		DebugTool.logInfo("startVersionCheck");
 		Intent intent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
 		List<ResolveInfo> infos = getPackageManager().queryBroadcastReceivers(intent, 0);
 		sdlMultiList = new HashMap<String,ResolveInfo>();
@@ -784,6 +787,9 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 			}
 		}
 		if(intent != null ){
+			if(intent.getBooleanExtra(TransportConstants.FOREGROUND_EXTRA, false)){
+				//enterForeground();
+			}
 			if(intent.hasExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA)){
 				//Make sure we are listening on RFCOMM
 				if(startSequenceComplete){ //We only check if we are sure we are already through the start up process
@@ -958,8 +964,9 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 		packetWriteTaskMaster.start();
 		
 		connectedTransportType = type;
-		
-		Intent startService = new Intent();  
+
+		DebugTool.logInfo("onTransportConnected:");
+		Intent startService = new Intent();
 		startService.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
 		//Perform our query prior to adding any extras or flags
 		List<ResolveInfo> sdlApps = getPackageManager().queryBroadcastReceivers(startService, 0);

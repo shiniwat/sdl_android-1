@@ -22,6 +22,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.util.Log;
 
 import com.smartdevicelink.transport.enums.TransportType;
@@ -124,21 +125,35 @@ public class RouterServiceValidator {
 		if(this.services.size() > 0){
 			for (ComponentName service : services) {
 				Log.d(TAG, "Supplied service name of " + service.getClassName());
-				if(!isServiceRunning(context,service)){
+				if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isServiceRunning(context,service)){
 					//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
 					this.services.remove(service);
 					DebugTool.logWarning("Supplied service is not actually running.");
+				} else {
+					// If the running router service is created by this app, the validation is good by default
+					if (service.getPackageName().equals(context.getPackageName())) {
+						return true;
+					}
 				}
 			}
 		}
 		if(this.services.size() == 0){
-			this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
-			if(this.services.size() == 0){ //if this is still null we know there is no service running so we can return false
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
+				this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
+				if(this.services.size() == 0) { //if this is still null we know there is no service running so we can return false
+					wakeUpRouterServices(transportType);
+					if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
+						return true;        // AOA Router expects to return true
+					} else {
+						return false;        // BT Router validator needs to return false.
+					}
+				}
+			} else {
 				wakeUpRouterServices(transportType);
 				if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
-					return true;		// AOA Router expects to return true
+					return true;        // AOA Router expects to return true
 				} else {
-					return false;		// BT Router validator needs to return false.
+					return false;        // BT Router validator needs to return false.
 				}
 			}
 		}
@@ -374,6 +389,7 @@ public class RouterServiceValidator {
 	 * @return 
 	 */
 	private static List<SdlApp> findAllSdlApps(Context context){
+		DebugTool.logInfo("findAllSdlApps");
 		List<SdlApp> apps = new ArrayList<SdlApp>();
 		PackageManager packageManager = context.getPackageManager();
 		Intent intent = new Intent();

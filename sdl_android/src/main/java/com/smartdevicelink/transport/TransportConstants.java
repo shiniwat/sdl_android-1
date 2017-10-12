@@ -10,6 +10,7 @@ package com.smartdevicelink.transport;
  */
 public class TransportConstants {
 	public static final String START_ROUTER_SERVICE_ACTION					="sdl.router.startservice";
+	public static final String FOREGROUND_EXTRA 							= "foreground";
 
 	public static final String BIND_LOCATION_PACKAGE_NAME_EXTRA 			= "BIND_LOCATION_PACKAGE_NAME_EXTRA";
 	public static final String BIND_LOCATION_CLASS_NAME_EXTRA				= "BIND_LOCATION_CLASS_NAME_EXTRA";
@@ -58,6 +59,8 @@ public class TransportConstants {
 
 	public static final String ROUTER_TRANSPORT_TYPE                            = "router.transport.type";
 	public static final String AOA_ROUTER_OPEN_ACCESSORY                        = "sdl.router.openaccessory";
+	public static final String SDL_NOTIFICATION_CHANNEL_ID 						= "sdl_notification_channel";
+	public static final String SDL_NOTIFICATION_CHANNEL_NAME 					= "SmartDeviceLink";
 
 	/**
 	 * This class houses all important router service versions
