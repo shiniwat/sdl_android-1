@@ -113,7 +113,8 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 					final ComponentName componentName = intent.getParcelableExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_CMP_NAME);
 					if(componentName!=null){
 						// HACK
-						if (componentName.toString().contains("SdlAoaRouterService")) {
+						if (componentName.toString().toLowerCase().contains(SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
+							//queuedService = componentName;
 							return; // HACK
 						}
 						DebugTool.logInfo("componentName=" + componentName.toString());
@@ -281,6 +282,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 					runningRouterServicePackage = new Vector<ComponentName>();
 					runningRouterServicePackage.addAll(routerServices);
 					if (runningRouterServicePackage.isEmpty()) {
+						DebugTool.logInfo("ServiceFinder returned nothing.");
 						//If there isn't a service running we should try to start one
 						//We will try to sort the SDL enabled apps and find the one that's been installed the longest
 						Intent serviceIntent;
@@ -324,14 +326,31 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 						try {
 							serviceIntent.putExtra(TransportConstants.FOREGROUND_EXTRA, true);
 							context.startForegroundService(serviceIntent);
+							DebugTool.logInfo("startForegroundService: transport=" + transportType.toString());
 
 						} catch (SecurityException e) {
 							Log.e(TAG, "Security exception, process is bad");
 						}
 					} else {
+						DebugTool.logInfo("ServiceFinder returned something");
 						if (altTransportWake && runningRouterServicePackage != null && runningRouterServicePackage.size() > 0) {
 							wakeRouterServiceAltTransport(context);
 							return;
+						}
+						if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
+							boolean found = false;
+							for (ComponentName name: runningRouterServicePackage) {
+								DebugTool.logInfo("serviceFinder returns: " + name);
+								if (name.getShortClassName().toLowerCase().contains(SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
+									found = true;
+								}
+							}
+							if (!found) {
+								Intent serviceIntent = new Intent(context, localAoaRouterClass);
+								serviceIntent.putExtra(TransportConstants.FOREGROUND_EXTRA, true);
+								context.startForegroundService(serviceIntent);
+								DebugTool.logInfo("startForegroundService: transport=" + transportType.toString());
+							}
 						}
 						return;
 					}
