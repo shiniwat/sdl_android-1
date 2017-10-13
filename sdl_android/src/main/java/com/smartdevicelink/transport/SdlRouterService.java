@@ -788,7 +788,7 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 		}
 		if(intent != null ){
 			if(intent.getBooleanExtra(TransportConstants.FOREGROUND_EXTRA, false)){
-				//enterForeground();
+				enterForeground(R.drawable.ic_sdl);
 			}
 			if(intent.hasExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA)){
 				//Make sure we are listening on RFCOMM

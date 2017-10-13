@@ -242,8 +242,6 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 						serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
 					}
 					try {
-						// @TODO: suppress BT router.
-						//Log.d(TAG, "suppress BT router");
 						context.startService(serviceIntent);
 					}catch (SecurityException e){
 						Log.e(TAG, "Security exception, process is bad");
@@ -254,11 +252,9 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 				if (transportType == TransportType.MULTIPLEX_AOA && localAoaRouterClass != null) {
 					DebugTool.logInfo("Router service is not running: AoaRouter is " + localAoaRouterClass.toString());
 					//if (isForegroundApp(context)) {
-					if (localAoaRouterClass != null) {
 						Intent aoaRouterIntent = new Intent(context, localAoaRouterClass);
 						ComponentName name = context.startService(aoaRouterIntent);
 						DebugTool.logInfo("startService " + name);
-					}
 					//} else {
 					//	DebugTool.logInfo("do not start service because we are not foreground");
 					//}
@@ -383,7 +379,6 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		for (RunningServiceInfo service : runningServices) {
 			//We will check to see if it contains this name, should be pretty specific
 			//Log.d(TAG, "Found Service: "+ service.service.getClassName());
-			// TODO: for now let's point to AOA Router service.
 			//Log.d(TAG, "package=" + service.service.getPackageName() + " process=" + service.process);
 			if ((service.service.getClassName()).toLowerCase(Locale.US).contains(SDL_ROUTER_SERVICE_CLASS_NAME) && AndroidTools.isServiceExported(context, service.service) && transportType == TransportType.MULTIPLEX) {
 

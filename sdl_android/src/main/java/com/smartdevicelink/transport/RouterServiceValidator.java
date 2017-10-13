@@ -156,6 +156,7 @@ public class RouterServiceValidator {
 					return false;        // BT Router validator needs to return false.
 				}
 			}
+
 		}
 
 		for (ComponentName service : services) {

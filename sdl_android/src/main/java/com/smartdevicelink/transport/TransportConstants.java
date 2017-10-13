@@ -57,8 +57,8 @@ public class TransportConstants {
 
 	public static final String PING_ROUTER_SERVICE_EXTRA 						= "ping.router.service";
 
-	public static final String ROUTER_TRANSPORT_TYPE                            = "router.transport.type";
-	public static final String AOA_ROUTER_OPEN_ACCESSORY                        = "sdl.router.openaccessory";
+	public static final String ROUTER_TRANSPORT_TYPE    						= "router.transport.type";
+	public static final String AOA_ROUTER_OPEN_ACCESSORY						= "sdl.router.openaccessory";
 	public static final String SDL_NOTIFICATION_CHANNEL_ID 						= "sdl_notification_channel";
 	public static final String SDL_NOTIFICATION_CHANNEL_NAME 					= "SmartDeviceLink";
 
