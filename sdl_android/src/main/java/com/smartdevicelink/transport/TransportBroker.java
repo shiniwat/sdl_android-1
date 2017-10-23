@@ -23,11 +23,13 @@ import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
 import com.smartdevicelink.transport.utl.ByteArrayMessageSpliter;
 import com.smartdevicelink.util.DebugTool;
+import com.smartdevicelink.util.ServiceFinder;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Vector;
 
 
 public class TransportBroker {
@@ -516,7 +518,7 @@ public class TransportBroker {
 		/**
 		 * This registers this service with the router service
 		 */
-		private boolean registerWithRouterService(TransportType type){
+		private boolean registerWithRouterService(final TransportType type){
 			if(getContext()==null){
 				Log.e(TAG, "Context set to null, failing out");
 				return false;
@@ -532,6 +534,25 @@ public class TransportBroker {
 					Log.d(TAG,whereToReply + " found no router service. Shutting down.");
 					this.onHardwareDisconnected(null);
 					return false;
+				} else {
+					ServiceFinder finder = new ServiceFinder(getContext(), getContext().getPackageName(), new ServiceFinder.ServiceFinderCallback() {
+						@Override
+						public void onComplete(Vector<ComponentName> routerServices) {
+							for (ComponentName name: routerServices) {
+								if (type.equals(TransportType.MULTIPLEX_AOA) && name.getClassName().contains("AoaRouter")) {
+									routerPackage = name.getPackageName();
+									routerClassName = name.getClassName();
+									break;
+								} else if (type.equals(TransportType.MULTIPLEX) && name.getClassName().contains("Router")) {
+									routerPackage = name.getPackageName();
+									routerClassName = name.getClassName();
+									break;
+								}
+							}
+							sendBindingIntent();
+						}
+					});
+					return true;
 				}
 			}else{//We were already told where to bind. This should be the case.
 				this.routerClassName = this.routerService.getClassName();
@@ -553,10 +574,11 @@ public class TransportBroker {
 				Intent bindingIntent = new Intent();
 				bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
 				//Quickly make sure it's just up and running
-				getContext().startService(bindingIntent);
+				getContext().startService(bindingIntent); // this may causes security exception if the service is not exported.
 				bindingIntent.setAction( TransportConstants.BIND_REQUEST_TYPE_CLIENT);
 				return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
 			}else{
+				DebugTool.logError("routerPackage or Classname is null");
 				return false;
 			}
 		}
