@@ -4012,9 +4012,6 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		VideoStreamingParameters acceptedParams = tryStartVideoStream(isEncrypted, parameters);
         if (acceptedParams != null) {
             return sdlSession.startVideoStream();
-        } else if(getWiProVersion() < 5){
-			sdlSession.setAcceptedVideoParams(new VideoStreamingParameters());
-			return sdlSession.startVideoStream();
         } else {
             return null;
         }
@@ -4205,6 +4202,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
         scheduler.shutdown();
 
         if (navServiceStartResponse) {
+			if(getWiProVersion() < 5){ //Versions 1-4 do not support streaming parameter negotiations
+				sdlSession.setAcceptedVideoParams(parameters);
+			}
 			return sdlSession.getAcceptedVideoParams();
         }
 
@@ -6169,13 +6169,24 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 	}
 
 	@SuppressWarnings("unused")
+	public boolean isCapabilitySupported(SystemCapabilityType systemCapabilityType) {
+		return _systemCapabilityManager != null && _systemCapabilityManager.isCapabilitySupported(systemCapabilityType);
+	}
+
+	@SuppressWarnings("unused")
 	public void getCapability(SystemCapabilityType systemCapabilityType, OnSystemCapabilityListener scListener){
-		_systemCapabilityManager.getCapability(systemCapabilityType, scListener);
+		if(_systemCapabilityManager != null){
+			_systemCapabilityManager.getCapability(systemCapabilityType, scListener);
+		}
 	}
 
 	@SuppressWarnings("unused")
 	public Object getCapability(SystemCapabilityType systemCapabilityType){
-		return _systemCapabilityManager.getCapability(systemCapabilityType);
+		if(_systemCapabilityManager != null ){
+			return _systemCapabilityManager.getCapability(systemCapabilityType);
+		}else{
+			return null;
+		}
 	}
 
 	/* ******************* END Public Helper Methods *************************/
@@ -6319,7 +6330,6 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 					}
 				}
 			});
-			hapticManager = new HapticInterfaceManager(iSdl);
 		}
 
 		public void startVideoStreaming(Class<? extends SdlRemoteDisplay> remoteDisplayClass, VideoStreamingParameters parameters, boolean encrypted){
@@ -6327,6 +6337,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			if(streamListener == null){
 				Log.e(TAG, "Error starting video service");
 				return;
+			}
+			VideoStreamingCapability capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);
+			if(capability != null && capability.getIsHapticSpatialDataSupported()){
+				hapticManager = new HapticInterfaceManager(internalInterface);
 			}
 			this.remoteDisplayClass = remoteDisplayClass;
 			try {
@@ -6372,13 +6386,14 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						//Remote display has been created.
 						//Now is a good time to do parsing for spatial data
 						VideoStreamingManager.this.remoteDisplay = remoteDisplay;
-						remoteDisplay.getMainView().post(new Runnable() {
-							@Override
-							public void run() {
-								hapticManager.refreshHapticData(remoteDisplay.getMainView());
-							}
-						});
-
+						if(hapticManager != null) {
+							remoteDisplay.getMainView().post(new Runnable() {
+								@Override
+								public void run() {
+									hapticManager.refreshHapticData(remoteDisplay.getMainView());
+								}
+							});
+						}
 						//Get touch scalars
 						ImageResolution resolution = null;
 						if(getWiProVersion()>=5){ //At this point we should already have the capability
@@ -6403,12 +6418,14 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 					public void onInvalidated(final SdlRemoteDisplay remoteDisplay) {
 						//Our view has been invalidated
 						//A good time to refresh spatial data
-						remoteDisplay.getMainView().post(new Runnable() {
-							@Override
-							public void run() {
-								hapticManager.refreshHapticData(remoteDisplay.getMainView());
-							}
-						});
+						if(hapticManager != null) {
+							remoteDisplay.getMainView().post(new Runnable() {
+								@Override
+								public void run() {
+									hapticManager.refreshHapticData(remoteDisplay.getMainView());
+								}
+							});
+						}
 					}
 				} ));
 				Thread showPresentation = new Thread(fTask);
