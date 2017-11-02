@@ -116,7 +116,7 @@ public class SystemCapabilityManager {
 		request.setOnRPCResponseListener(new OnRPCResponseListener() {
 			@Override
 			public void onResponse(int correlationId, RPCResponse response) {
-				if(response.getSuccess()){
+				if(response.getSuccess() && response instanceof GetSystemCapabilityResponse){
 					Object retrievedCapability = ((GetSystemCapabilityResponse) response).getSystemCapability().getCapabilityForType(systemCapabilityType);
 					cachedSystemCapabilities.put(systemCapabilityType, retrievedCapability);
 					if(scListener!=null){scListener.onCapabilityRetrieved(retrievedCapability);	}

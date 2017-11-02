@@ -4012,6 +4012,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		VideoStreamingParameters acceptedParams = tryStartVideoStream(isEncrypted, parameters);
         if (acceptedParams != null) {
             return sdlSession.startVideoStream();
+        } else if (getWiProVersion() < 5) {
+            // for lower protocol version, we need to set vide parameters manually.
+            sdlSession.setAcceptedVideoParams(new VideoStreamingParameters());
+            return sdlSession.startVideoStream();
         } else {
             return null;
         }
