@@ -4013,11 +4013,15 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
         if (acceptedParams != null) {
             return sdlSession.startVideoStream();
         } else if (getWiProVersion() < 5) {
-            // for lower protocol version, we need to set vide parameters manually.
+            // for lower protocol version, we need to set video parameters manually.
             sdlSession.setAcceptedVideoParams(new VideoStreamingParameters());
             return sdlSession.startVideoStream();
         } else {
-            return null;
+            // work around. For some reason, VideoStreamingParam is not handled correctly between Core and HMI.
+            // Even for such case, we will start video streaming with default params.
+            sdlSession.setAcceptedVideoParams(new VideoStreamingParameters());
+            return sdlSession.startVideoStream();
+            //return null;
         }
     }
 
@@ -4210,7 +4214,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 				sdlSession.setAcceptedVideoParams(parameters);
 			}
 			return sdlSession.getAcceptedVideoParams();
-        }
+		}
 
         if (navServiceStartRejectedParams != null) {
 			StringBuilder builder = new StringBuilder();
@@ -4225,7 +4229,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
         } else {
 			DebugTool.logWarning("StartService for nav failed (rejected params not supplied)");
-		}
+        }
 
         return null;
     }
@@ -6400,13 +6404,16 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						}
 						//Get touch scalars
 						ImageResolution resolution = null;
+						VideoStreamingCapability capability = null;
 						if(getWiProVersion()>=5){ //At this point we should already have the capability
-							VideoStreamingCapability capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);
+							capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);
+						}
+						if (capability != null) {
 							resolution = capability.getPreferredResolution();
-						}else {
+						} else {
 							DisplayCapabilities dispCap = (DisplayCapabilities) _systemCapabilityManager.getCapability(SystemCapabilityType.DISPLAY);
 							if (dispCap != null) {
-								 resolution = (dispCap.getScreenParams().getImageResolution());
+								resolution = (dispCap.getScreenParams().getImageResolution());
 							}
 						}
 						if(resolution != null){

@@ -9,6 +9,7 @@ import com.smartdevicelink.proxy.rpc.enums.PrerecordedSpeech;
 import com.smartdevicelink.proxy.rpc.enums.SpeechCapabilities;
 import com.smartdevicelink.proxy.rpc.enums.VrCapabilities;
 
+import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
 
@@ -177,7 +178,12 @@ public class RegisterAppInterfaceResponse extends RPCResponse {
 	 */
     @SuppressWarnings("unchecked")
     public List<SoftButtonCapabilities> getSoftButtonCapabilities() {
-		return (List<SoftButtonCapabilities>) getObject(SoftButtonCapabilities.class, KEY_SOFT_BUTTON_CAPABILITIES);
+		final SoftButtonCapabilities softButtonCapabilities = (SoftButtonCapabilities)getObject(SoftButtonCapabilities.class, KEY_SOFT_BUTTON_CAPABILITIES);
+		return new ArrayList<SoftButtonCapabilities>() {
+			{
+				add(softButtonCapabilities);
+			}
+		};
     }
     /**
      * Sets softButtonCapabilities
