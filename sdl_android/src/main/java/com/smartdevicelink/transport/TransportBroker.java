@@ -469,7 +469,8 @@ public class TransportBroker {
 		    }			
 			return false;
 		}
-		
+
+		static int sMaxPacketSize = 0;
 		
 		public boolean sendPacketToRouterService(SdlPacket packet){ //We use ints because that is all that is supported by the outputstream class
 			//Log.d(TAG,whereToReply + "Sending packet to router service");
@@ -486,6 +487,10 @@ public class TransportBroker {
 				return false;
 			}
 			byte[] bytes = packet.constructPacket();
+			if (bytes.length > sMaxPacketSize) {
+				sMaxPacketSize = bytes.length;
+				DebugTool.logInfo(String.format("sendPacketToRouterService updated max length=%d", bytes.length));
+			}
 			if(bytes.length<ByteArrayMessageSpliter.MAX_BINDER_SIZE){//Determine if this is under the packet length.
 				Message message = Message.obtain(); //Do we need to always obtain new? or can we just swap bundles?
 				message.what = TransportConstants.ROUTER_SEND_PACKET;
@@ -504,7 +509,7 @@ public class TransportBroker {
 				sendMessageToRouterService(message);
 				return true;
 			}else{ //Message is too big for IPC transaction 
-				//Log.w(TAG, "Message too big for single IPC transaction. Breaking apart. Size - " +  bytes.length);
+				DebugTool.logWarning(String.format("Message too big for single IPC transaction. Breaking apart. Size - %d", bytes.length));
 				ByteArrayMessageSpliter splitter = new ByteArrayMessageSpliter(appId,TransportConstants.ROUTER_SEND_PACKET,bytes,packet.getPrioirtyCoefficient() );	
 				splitter.setRouterServiceVersion(routerServiceVersion);
 				while(splitter.isActive()){
@@ -574,6 +579,10 @@ public class TransportBroker {
 				Intent bindingIntent = new Intent();
 				bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
 				//Quickly make sure it's just up and running
+				// getContext() may be null..
+				if (getContext() == null) {
+					return false;
+				}
 				getContext().startService(bindingIntent); // this may causes security exception if the service is not exported.
 				bindingIntent.setAction( TransportConstants.BIND_REQUEST_TYPE_CLIENT);
 				return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
