@@ -489,7 +489,7 @@ public class TransportBroker {
 			byte[] bytes = packet.constructPacket();
 			if (bytes.length > sMaxPacketSize) {
 				sMaxPacketSize = bytes.length;
-				DebugTool.logInfo(String.format("sendPacketToRouterService updated max length=%d", bytes.length));
+				//DebugTool.logInfo(String.format("sendPacketToRouterService updated max length=%d", bytes.length));
 			}
 			if(bytes.length<ByteArrayMessageSpliter.MAX_BINDER_SIZE){//Determine if this is under the packet length.
 				Message message = Message.obtain(); //Do we need to always obtain new? or can we just swap bundles?
@@ -509,7 +509,7 @@ public class TransportBroker {
 				sendMessageToRouterService(message);
 				return true;
 			}else{ //Message is too big for IPC transaction 
-				DebugTool.logWarning(String.format("Message too big for single IPC transaction. Breaking apart. Size - %d", bytes.length));
+				//DebugTool.logWarning(String.format("Message too big for single IPC transaction. Breaking apart. Size - %d", bytes.length));
 				ByteArrayMessageSpliter splitter = new ByteArrayMessageSpliter(appId,TransportConstants.ROUTER_SEND_PACKET,bytes,packet.getPrioirtyCoefficient() );	
 				splitter.setRouterServiceVersion(routerServiceVersion);
 				while(splitter.isActive()){
