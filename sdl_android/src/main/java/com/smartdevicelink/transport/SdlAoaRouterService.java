@@ -375,7 +375,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 					}
 					if(service.isTransportConnected && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
 						if(service.pingIntent == null){
-							service.initPingIntent(this.getClass());
+							service.initPingIntent(this.getClass(), TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 						}
 						DebugTool.logInfo("sendBroadcast(pingIntent)");
 						service.getBaseContext().sendBroadcast(service.pingIntent);
@@ -451,7 +451,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 
 	HashMap<String,ResolveInfo> sdlMultiList ;
 	public void startVersionCheck(){
-		Intent intent = new Intent(START_SERVICE_ACTION);
+		Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 		List<ResolveInfo> infos = getPackageManager().queryBroadcastReceivers(intent, 0);
 		sdlMultiList = new HashMap<String,ResolveInfo>();
 		for(ResolveInfo info: infos){
@@ -651,7 +651,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 		requestAccessory();
 
 		Intent startService = new Intent();
-		startService.setAction(START_SERVICE_ACTION);
+		startService.setAction(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 		startService.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
 		startService.putExtra(TransportConstants.FORCE_TRANSPORT_CONNECTED, true);
 		startService.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_APP_PACKAGE, getBaseContext().getPackageName());
@@ -684,7 +684,7 @@ public class SdlAoaRouterService extends SdlRouterBase implements ITransportWrit
 				unregisterIntent.putExtra(TransportConstants.HARDWARE_DISCONNECTED, type.name());
 			}
 			unregisterIntent.putExtra(TransportConstants.ENABLE_LEGACY_MODE_EXTRA, legacyModeEnabled);
-			unregisterIntent.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
+			unregisterIntent.setAction(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 			sendBroadcast(unregisterIntent);
 			//return;
 		}else{

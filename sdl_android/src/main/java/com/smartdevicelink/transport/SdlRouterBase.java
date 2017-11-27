@@ -89,7 +89,6 @@ abstract public class SdlRouterBase extends Service {
 	/**
 	 * @deprecated use {@link TransportConstants#START_ROUTER_SERVICE_ACTION} instead
 	 */
-	public static final String START_SERVICE_ACTION							= "sdl.router.startservice";
 	public static final String REGISTER_WITH_ROUTER_ACTION 					= "com.sdl.android.register";
 
 	private final int UNREGISTER_APP_INTERFACE_CORRELATION_ID = 65530;
@@ -293,9 +292,9 @@ abstract public class SdlRouterBase extends Service {
 	}
 
 
-	void initPingIntent(Class myClass){
+	void initPingIntent(Class myClass, String action){
 		pingIntent = new Intent();
-		pingIntent.setAction(START_SERVICE_ACTION);
+		pingIntent.setAction(action);
 		pingIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
 		pingIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_APP_PACKAGE, getBaseContext().getPackageName());
 		pingIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_CMP_NAME, new ComponentName(this, myClass));
@@ -331,7 +330,7 @@ abstract public class SdlRouterBase extends Service {
 						return;
 					}
 					if(pingIntent == null){
-						initPingIntent(this.getClass());
+						initPingIntent(this.getClass(), TransportConstants.START_ROUTER_SERVICE_ACTION);
 					}
 					getBaseContext().sendBroadcast(pingIntent);
 					synchronized(PING_COUNT_LOCK){

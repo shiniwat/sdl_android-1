@@ -188,7 +188,7 @@ public class RouterServiceValidator {
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
 			context.sendBroadcast(intent);
 		} else if (transportType == TransportType.MULTIPLEX_AOA && SdlAoaRouterService.shouldServiceRemainOpen(this.context)) {
-			Intent intent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
+			Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
 			context.sendBroadcast(intent);

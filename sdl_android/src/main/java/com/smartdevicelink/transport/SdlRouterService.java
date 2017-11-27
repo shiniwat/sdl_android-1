@@ -608,7 +608,7 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 	        		}
 	        		if(service.isTransportConnected && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
 	        			if(service.pingIntent == null){
-	        				service.initPingIntent(this.getClass());
+	        				service.initPingIntent(this.getClass(), TransportConstants.START_ROUTER_SERVICE_ACTION);
 	        			}
 	        			service.getBaseContext().sendBroadcast(service.pingIntent); 
 	        		}

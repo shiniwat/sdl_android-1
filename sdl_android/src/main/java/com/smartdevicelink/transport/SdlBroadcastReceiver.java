@@ -82,7 +82,8 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
         		|| action.equalsIgnoreCase(STATE_CHANGED)
         		|| action.equalsIgnoreCase(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)
         		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)
-				|| action.equalsIgnoreCase(SdlRouterBase.REGISTER_NEWER_SERVER_INSTANCE_ACTION))){
+        		|| action.equalsIgnoreCase(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION)
+        		|| action.equalsIgnoreCase(SdlRouterBase.REGISTER_NEWER_SERVER_INSTANCE_ACTION))){
         	//We don't want anything else here if the child class called super and has different intent filters
         	//Log.i(TAG, "Unwanted intent from child class");
         	return;
@@ -104,7 +105,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		}
 
 		//This will only be true if we are being told to reopen our SDL service because SDL is enabled
-		if(action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)){
+		if(action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION) || action.equalsIgnoreCase(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION)){
 			final int typeValue = intent.getIntExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, TransportType.MULTIPLEX.ordinal());
 			if(intent.hasExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA)){
 				DebugTool.logInfo("got START_ROUTER_SERVICE_ACTION + START_ROUTER_SERVICE_SDL_ENABLED_EXTRA");
@@ -525,7 +526,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 				DebugTool.logInfo("sent Broadcast: START_ROUTER_SERVICE_ACTION for BT");
 			} else if (transportType == TransportType.MULTIPLEX_AOA && SdlAoaRouterService.shouldServiceRemainOpen(context)){
 				Intent routerIntent = new Intent();
-				routerIntent.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
+				routerIntent.setAction(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 				routerIntent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 				routerIntent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, TransportType.MULTIPLEX_AOA.ordinal());
 				context.sendBroadcast(routerIntent);
