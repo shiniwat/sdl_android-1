@@ -113,11 +113,6 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 					String packageName = intent.getStringExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_APP_PACKAGE);
 					final ComponentName componentName = intent.getParcelableExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_CMP_NAME);
 					if(componentName!=null){
-						// HACK
-						if (componentName.toString().toLowerCase().contains(SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
-							//queuedService = componentName;
-							return; // HACK
-						}
 						DebugTool.logInfo("componentName=" + componentName.toString());
 						final Intent finalIntent = intent;
 						final Context finalContext = context;

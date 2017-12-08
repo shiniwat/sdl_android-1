@@ -210,7 +210,9 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 
 	public void startTransport() throws SdlException {
-		_transport.openConnection();
+		if (_transport != null) {
+			_transport.openConnection();
+		}
 	}
 
 	public Boolean getIsConnected() {
@@ -345,6 +347,9 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	 * @see TransportType
 	 */
 	public TransportType getCurrentTransportType() {
+		if (_transport == null) {
+			return TransportType.MULTIPLEX;
+		}
 		return _transport.getTransportType();
 	}
 

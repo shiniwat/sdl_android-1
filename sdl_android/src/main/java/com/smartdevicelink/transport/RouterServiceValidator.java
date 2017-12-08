@@ -109,7 +109,7 @@ public class RouterServiceValidator {
 	 * @return whether or not the currently running router service can be trusted.
 	 */
 	public boolean validate(TransportType transportType){
-		
+
 		if(securityLevel == -1){
 			securityLevel = getSecurityLevel(context);
 		}
@@ -132,6 +132,7 @@ public class RouterServiceValidator {
 				} else {
 					// If the running router service is created by this app, the validation is good by default
 					if (service.getPackageName().equals(context.getPackageName())) {
+						DebugTool.logInfo("validate returns true, because running router is supplied by this app");
 						return true;
 					}
 				}
@@ -142,19 +143,12 @@ public class RouterServiceValidator {
 				this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
 				if(this.services.size() == 0) { //if this is still null we know there is no service running so we can return false
 					wakeUpRouterServices(transportType);
-					if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
-						return true;        // AOA Router expects to return true
-					} else {
-						return false;        // BT Router validator needs to return false.
-					}
+					DebugTool.logInfo("No router found. validate returns false");
+					return false;
 				}
 			} else {
 				wakeUpRouterServices(transportType);
-				if (transportType.equals(TransportType.MULTIPLEX_AOA)) {
-					return true;        // AOA Router expects to return true
-				} else {
-					return false;        // BT Router validator needs to return false.
-				}
+				return false;
 			}
 
 		}
@@ -163,15 +157,16 @@ public class RouterServiceValidator {
 			//Log.d(TAG, "Checking app package: " + service.getClassName());
 			packageName = this.appPackageForComponentName(service, pm);
 
-
 			if(packageName!=null){//Make sure there is a service running
 				if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
 					if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
+						DebugTool.logInfo("validate found trusted router. returning true");
 						return true;
 					}
 				}
 			}//No running service found. Might need to attempt to start one
 		}
+		DebugTool.logInfo("validate cannot find trusted router. returning false");
 		//TODO spin up a known good router service
 		wakeUpRouterServices(transportType);
 		return false;
