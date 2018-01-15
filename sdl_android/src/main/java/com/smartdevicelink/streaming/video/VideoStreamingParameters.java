@@ -133,7 +133,11 @@ public class VideoStreamingParameters {
      * @see VideoStreamingCapability
      */
     public void update(VideoStreamingCapability capability){
-        if(capability.getMaxBitrate()!=null){ this.bitrate = capability.getMaxBitrate(); }
+        if(capability.getMaxBitrate()!=null){
+			// The unit of maxBitrate is kbps.
+			// Refer to https://github.com/smartdevicelink/sdl_core/blob/master/src/components/interfaces/MOBILE_API.xml#L2532
+			this.bitrate = capability.getMaxBitrate() * 1000;
+        }
         ImageResolution resolution = capability.getPreferredResolution();
         if(resolution!=null){
             if(resolution.getResolutionHeight()!=null && resolution.getResolutionHeight() > 0){ this.resolution.setResolutionHeight(resolution.getResolutionHeight()); }

@@ -84,6 +84,7 @@ public class SystemCapabilityManager {
 		Object capability = cachedSystemCapabilities.get(systemCapabilityType);
 		if(capability != null){
 			scListener.onCapabilityRetrieved(capability);
+			return; // we should return here, so that OnSystemCapabilityListener gets called only once. Otherwise we'll get NACK'ed from Core.
 		}else if(scListener == null){
 			return;
 		}
