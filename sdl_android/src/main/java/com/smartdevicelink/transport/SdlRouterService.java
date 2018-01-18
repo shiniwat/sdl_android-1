@@ -848,7 +848,9 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 		if(!wrongProcess){
 			try{
 				android.os.Process.killProcess(android.os.Process.myPid());
-			}catch(Exception e){}
+			}catch(Exception e){
+				e.printStackTrace();
+			}
 		}
 	}
 	
@@ -928,6 +930,7 @@ public class SdlRouterService extends SdlRouterBase implements ITransportWriter 
 		closing = true;
 		if(getBaseContext()!=null){
 			stopSelf();
+			onDestroy(); // make sure killing the process here
 		}else{
 			onDestroy();
 		}

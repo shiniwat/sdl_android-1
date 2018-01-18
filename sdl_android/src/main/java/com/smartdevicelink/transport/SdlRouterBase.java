@@ -31,6 +31,8 @@ package com.smartdevicelink.transport;
 
 import android.annotation.TargetApi;
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -251,6 +253,7 @@ abstract public class SdlRouterBase extends Service {
 		registrationIntent.setAction(action);
 		registrationIntent.putExtra(TransportConstants.BIND_LOCATION_PACKAGE_NAME_EXTRA, this.getPackageName());
 		registrationIntent.putExtra(TransportConstants.BIND_LOCATION_CLASS_NAME_EXTRA, this.getClass().getName());
+		registrationIntent.setFlags((Intent.FLAG_RECEIVER_FOREGROUND));
 		return registrationIntent;
 	}
 
@@ -690,6 +693,13 @@ abstract public class SdlRouterBase extends Service {
 		}
 		builder.setTicker("SmartDeviceLink Connected");
 		builder.setContentText("Connected to " + this.getConnectedDeviceName());
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			final String channelId = "SmartDeviceLink";
+			builder.setChannelId(channelId);
+			NotificationChannel channel = new NotificationChannel(channelId, channelId, NotificationManager.IMPORTANCE_DEFAULT);
+			NotificationManager notificationManager = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+			notificationManager.createNotificationChannel(channel);
+		}
 
 		//We should use icon from library resources if available
 		int trayId = getResources().getIdentifier("sdl_tray_icon", "drawable", getPackageName());
