@@ -128,6 +128,13 @@ public class MultiplexTransport extends SdlTransport{
 		return false;
 	}
 
+	public void sendUsbAttachedToRouter(TransportType type) {
+		if (brokerThread != null && type == TransportType.MULTIPLEX_AOA) {
+			brokerThread.sendUsbAttachedToRouter(type);
+		} else {
+			DebugTool.logWarning("brokerThread is null");
+		}
+	}
 	/**
 	 * This thread will handle the broker transaction with the router service.
 	 *
@@ -159,7 +166,7 @@ public class MultiplexTransport extends SdlTransport{
 				connected = false;
 				if(broker!=null){
 					try{
-						broker.start(getTransportType());
+						broker.start();
 					}catch(Exception e){
 						handleTransportError("Error starting transport", e);
 					}
@@ -197,6 +204,14 @@ public class MultiplexTransport extends SdlTransport{
 			}
 		}
 
+		public void sendUsbAttachedToRouter(TransportType type) {
+			if (broker != null && type == TransportType.MULTIPLEX_AOA) {
+				broker.sendUsbAttachedToRouter(type);
+			} else {
+				DebugTool.logInfo("broker is null");
+			}
+		}
+
 		public void sendPacket(SdlPacket packet){
 			broker.sendPacketToRouterService(packet);
 		}
@@ -220,7 +235,7 @@ public class MultiplexTransport extends SdlTransport{
 					initTransportBroker();
 					if(queueStart){
 						try{
-							broker.start(getTransportType());
+							broker.start();
 						}catch(Exception e){
 							handleTransportError("Error starting transport", e);
 						}
@@ -235,12 +250,12 @@ public class MultiplexTransport extends SdlTransport{
 		
 		public void initTransportBroker(){
 
-			broker = new TransportBroker(context, appId, service){
+			broker = new TransportBroker(context, appId, service, getTransportType()){
 				
 				@Override
 				public boolean onHardwareConnected(TransportType type) {
 					if(super.onHardwareConnected(type)){
-						DebugTool.logInfo("On transport connected...");
+						DebugTool.logInfo("On transport connected..." + type.name());
 						if(!connected){
 							connected = true;
 							handleTransportConnected();
@@ -248,7 +263,7 @@ public class MultiplexTransport extends SdlTransport{
 						return true;
 					}else{
 						try{
-							this.start(getTransportType());
+							this.start();
 						}catch(Exception e){
 							handleTransportError("Error starting transport", e);
 						}

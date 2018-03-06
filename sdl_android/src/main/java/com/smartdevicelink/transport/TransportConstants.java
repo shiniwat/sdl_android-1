@@ -51,6 +51,7 @@ public class TransportConstants {
 
 	
 	public static final String	BIND_REQUEST_TYPE_CLIENT						= "BIND_REQUEST_TYPE_CLIENT";
+	public static final String	BIND_REQUEST_TYPE_AOA_CLIENT					= "BIND_REQUEST_TYPE_AOA_CLIENT";
 	public static final String	BIND_REQUEST_TYPE_ALT_TRANSPORT					= "BIND_REQUEST_TYPE_ALT_TRANSPORT";
 	public static final String	BIND_REQUEST_TYPE_STATUS						= "BIND_REQUEST_TYPE_STATUS";
 
@@ -177,6 +178,9 @@ public class TransportConstants {
 	public static final int ROUTER_SEND_PACKET 											= 0x20;
 
 	// AOA Router message
+	// AOA Router message
+	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT 							= 0x30;
+	public static final int ROUTER_REQUEST_AOA_CLIENT_CONNECT_RESPONSE					= 0x31;
 	public static final int ROUTER_REQUEST_USB_ATTACHED									= 0x32;
 
 	

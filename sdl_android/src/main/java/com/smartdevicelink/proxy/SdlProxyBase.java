@@ -106,7 +106,7 @@ import com.smartdevicelink.trace.SdlTrace;
 import com.smartdevicelink.trace.TraceDeviceInfo;
 import com.smartdevicelink.trace.enums.InterfaceActivityDirection;
 import com.smartdevicelink.transport.BaseTransportConfig;
-import com.smartdevicelink.transport.SdlAoaRouterService;
+import com.smartdevicelink.transport.SdlRouterService;
 import com.smartdevicelink.transport.SiphonServer;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.DebugTool;
@@ -442,6 +442,18 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		@Override
 		public void onProtocolSessionStartedNACKed(SessionType sessionType,
 				byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
+
+			{	// YAO CUSTOMIZED
+				String rparams = null;
+				if (rejectedParams != null) {
+					rparams = "[";
+					for (String s : rejectedParams) {
+						rparams += s + ",";
+					}
+					rparams += "]";
+				}
+			}
+
 			OnServiceNACKed message = new OnServiceNACKed(sessionType);
 			queueInternalMessage(message);
 			
@@ -702,6 +714,17 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_incomingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("INCOMING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// YAO CUSTOMIZE
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:incomingMessage";
+                                    mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+							}
 							dispatchIncomingMessage(message);
 						}
 	
@@ -728,6 +751,17 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_outgoingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("OUTGOING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// YAO CUSTOMIZE
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:outgoingMessage";
+                                    mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+							}
 							dispatchOutgoingMessage(message);
 						}
 	
@@ -1302,13 +1336,6 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		else if (_appService != null)
 		{
 			myService = _appService;
-		}
-		if (myService != null) {
-			if (_transportConfig.getTransportType() == TransportType.MULTIPLEX_AOA) {
-				if (!SdlAoaRouterService.shouldServiceRemainOpen(myService.getApplicationContext())) {
-					return false;
-				}
-			}
 		}
 		return true;
 	}

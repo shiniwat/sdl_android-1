@@ -1,38 +1,9 @@
-/*
- * Copyright (c) 2017, Xevo Inc.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
- *
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- *
- * * Neither the name of the copyright holder nor the names of its contributors
- *   may be used to endorse or promote products derived from this software
- *   without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 package com.smartdevicelink.transport;
 
 import android.annotation.TargetApi;
 import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.NotificationChannel;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -48,6 +19,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.util.Log;
 import android.util.SparseArray;
@@ -63,6 +36,7 @@ import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.protocol.enums.MessageType;
 import com.smartdevicelink.protocol.enums.SessionType;
 import com.smartdevicelink.proxy.rpc.UnregisterAppInterface;
+import com.smartdevicelink.transport.TransportConstants;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
 import com.smartdevicelink.transport.utl.ByteArrayMessageSpliter;
@@ -80,24 +54,25 @@ import java.util.concurrent.TimeUnit;
 import static com.smartdevicelink.transport.TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME;
 import static com.smartdevicelink.transport.TransportConstants.FORMED_PACKET_EXTRA_NAME;
 
+/**
+ * Created by swatanabe on 2017/06/28.
+ */
+
 abstract public class SdlRouterBase extends Service {
 	private final String TAG = "SdlRouterBase";
 
 	protected static final int ROUTER_SERVICE_VERSION_NUMBER = 4;
 	public static final String REGISTER_NEWER_SERVER_INSTANCE_ACTION		= "com.sdl.android.newservice";
+	public static final String REGISTER_WITH_ROUTER_ACTION 					= "com.sdl.android.register";
 
 	// constants
 	private static final long CLIENT_PING_DELAY = 1000;
-	/**
-	 * @deprecated use {@link TransportConstants#START_ROUTER_SERVICE_ACTION} instead
-	 */
-	public static final String REGISTER_WITH_ROUTER_ACTION 					= "com.sdl.android.register";
 
 	private final int UNREGISTER_APP_INTERFACE_CORRELATION_ID = 65530;
 	private static final int FOREGROUND_SERVICE_ID = 849;
 
 	boolean initPassed = false;
-	TransportType connectedTransportType = null;
+	//TransportType connectedTransportType = null; // @TODO move this to RegisteredApp
 
 	final Object SESSION_LOCK = new Object(), REGISTERED_APPS_LOCK = new Object(), PING_COUNT_LOCK = new Object();
 	public static HashMap<String, RegisteredApp> registeredApps;
@@ -106,9 +81,9 @@ abstract public class SdlRouterBase extends Service {
 
 	PacketWriteTaskMaster packetWriteTaskMaster = null;
 	public int cachedModuleVersion = -1;
-	public boolean isTransportConnected = false;
-	private ITransportWriter mWriter;
-	public String connectedDeviceName = "";			//The name of the connected Device
+	public final HashMap<TransportType, Boolean> isTransportConnected = new HashMap<TransportType, Boolean>();
+	private final HashMap<TransportType, ITransportWriter> mWriterMap = new HashMap<TransportType, ITransportWriter>();
+	public String  connectedDeviceName = "";			//The name of the connected Device
 
 	public static final int MESSAGE_STATE_CHANGE = 1;
 	public static final int MESSAGE_READ = 2;
@@ -129,8 +104,8 @@ abstract public class SdlRouterBase extends Service {
 	 */
 	private boolean isForeground = false;
 
-	public void setTransportWriter(ITransportWriter writer) {
-		mWriter = writer;
+	public void setTransportWriter(TransportType transportType, ITransportWriter writer) {
+		mWriterMap.put(transportType, writer);
 	}
 
 	/**
@@ -205,6 +180,7 @@ abstract public class SdlRouterBase extends Service {
 	}
 
 	public void putRegisteredApp(String id, RegisteredApp app) {
+		DebugTool.logInfo("putRegisteredApp:" + id);
 		synchronized(REGISTERED_APPS_LOCK){
 			if (registeredApps != null) {
 				RegisteredApp old = registeredApps.put(app.getAppId(), app);
@@ -218,6 +194,7 @@ abstract public class SdlRouterBase extends Service {
 	}
 
 	public RegisteredApp removeRegisteredApp(String id) {
+		DebugTool.logInfo("removeRegisteredApp:" + id);
 		RegisteredApp unregisteredApp = null;
 		synchronized(REGISTERED_APPS_LOCK){
 			if (registeredApps != null) {
@@ -229,6 +206,13 @@ abstract public class SdlRouterBase extends Service {
 
 	public RegisteredApp getRegisteredApp(String id) {
 		return registeredApps.get(id);
+	}
+	public TransportType getTransportTypeByAppId(String id) {
+		return registeredApps.get(id).getTransportType();
+	}
+	public TransportType getTransportTypeBySession(int session) {
+		String appId = getAppIDForSession(session, true);
+		return getTransportTypeByAppId(appId);
 	}
 	/* **************************************************************************************************************************************
 	****************************************************************************************************************************************
@@ -304,12 +288,14 @@ abstract public class SdlRouterBase extends Service {
 		pingIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_PING, true);
 	}
 
+	// Specific method for BT transport
 	void startClientPings(){
 		synchronized(this){
-			if(!isTransportConnected){ //If we aren't connected, bail
+			if(isTransportConnected.get(TransportType.BLUETOOTH) == Boolean.FALSE){ //If we aren't connected, bail
 				return;
 			}
-			if(isPingingClients){
+			DebugTool.logInfo("startClientPings");
+				if(isPingingClients){
 				Log.w(TAG, "Already pinging clients. Resting count");
 				synchronized(PING_COUNT_LOCK){
 					pingCount = 0;
@@ -460,7 +446,8 @@ abstract public class SdlRouterBase extends Service {
 	private void attemptToCleanUpModule(int session, int version){
 		Log.i(TAG, "Attempting to stop session " + session);
 		byte[] uai = createForceUnregisterApp((byte)session, (byte)version);
-		mWriter.manuallyWriteBytes(uai,0,uai.length);
+		ITransportWriter writer = mWriterMap.get(getTransportTypeBySession(session));
+		writer.manuallyWriteBytes(uai,0,uai.length);
 		int hashId = 0;
 		synchronized(this.SESSION_LOCK){
 			if(this.sessionHashIdMap.indexOfKey(session)>=0){
@@ -469,7 +456,7 @@ abstract public class SdlRouterBase extends Service {
 			}
 		}
 		byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)version, BitConverter.intToByteArray(hashId))).constructPacket();
-		mWriter.manuallyWriteBytes(stopService,0,stopService.length);
+		writer.manuallyWriteBytes(stopService,0,stopService.length);
 	}
 
 	private boolean sendPacketMessageToClient(RegisteredApp app, Message message, byte version){
@@ -485,16 +472,17 @@ abstract public class SdlRouterBase extends Service {
 			for(int i=0; i<size;i++){
 				sessionId = sessions.get(i).intValue();
 				unregister = createForceUnregisterApp((byte)sessionId,version);
-				mWriter.manuallyWriteBytes(unregister,0,unregister.length);
+				ITransportWriter writer = mWriterMap.get(getTransportTypeBySession(sessionId));
+				writer.manuallyWriteBytes(unregister,0,unregister.length);
 				int hashId = 0;
 				synchronized(this.SESSION_LOCK){
 					if(this.sessionHashIdMap.indexOfKey(sessionId)>=0){
 						hashId = this.sessionHashIdMap.get(sessionId);
 					}
 				}
-				stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)sessionId, 0, version, BitConverter.intToByteArray(hashId))).constructPacket();
+				stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)sessionId, 0, version,BitConverter.intToByteArray(hashId))).constructPacket();
 
-				mWriter.manuallyWriteBytes(stopService,0,stopService.length);
+				writer.manuallyWriteBytes(stopService,0,stopService.length);
 				synchronized(SESSION_LOCK){
 					this.sessionMap.remove(sessionId);
 					this.sessionHashIdMap.remove(sessionId);
@@ -524,12 +512,12 @@ abstract public class SdlRouterBase extends Service {
 				synchronized(REGISTERED_APPS_LOCK){
 					app = registeredApps.get(appid);
 				}
-				if(app==null){
-					Log.e(TAG, "No app found for app id " + appid + " Removing session maping and sending unregisterAI to head unit.");
+				if(app==null){Log.e(TAG, "No app found for app id " + appid + " Removing session maping and sending unregisterAI to head unit.");
 					//We have no app to match the app id tied to this session
 					removeSessionFromMap(session);
 					byte[] uai = createForceUnregisterApp((byte)session, (byte)packet.getVersion());
-					mWriter.manuallyWriteBytes(uai,0,uai.length);
+					ITransportWriter writer = mWriterMap.get(getTransportTypeBySession(session));
+					writer.manuallyWriteBytes(uai,0,uai.length);
 					int hashId = 0;
 					synchronized(this.SESSION_LOCK){
 						if(this.sessionHashIdMap.indexOfKey(session)>=0){
@@ -537,8 +525,8 @@ abstract public class SdlRouterBase extends Service {
 							this.sessionHashIdMap.remove(session);
 						}
 					}
-					byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)packet.getVersion(), BitConverter.intToByteArray(hashId))).constructPacket();
-					mWriter.manuallyWriteBytes(stopService,0,stopService.length);
+					byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)packet.getVersion(),BitConverter.intToByteArray(hashId))).constructPacket();
+					writer.manuallyWriteBytes(stopService,0,stopService.length);
 					return false;
 				}
 				byte version = (byte)packet.getVersion();
@@ -581,7 +569,7 @@ abstract public class SdlRouterBase extends Service {
 						return false;
 					}
 					//Log.w(TAG, "Message too big for single IPC transaction. Breaking apart. Size - " +  packet.getDataSize());
-					ByteArrayMessageSpliter splitter = new ByteArrayMessageSpliter(appid, TransportConstants.ROUTER_RECEIVED_PACKET,bytes,0);
+					ByteArrayMessageSpliter splitter = new ByteArrayMessageSpliter(appid,TransportConstants.ROUTER_RECEIVED_PACKET,bytes,0);
 					while(splitter.isActive()){
 						if(!sendPacketMessageToClient(app,splitter.nextMessage(),version)){
 							Log.w(TAG, "Error sending first message of split packet to client " + app.appId);
@@ -722,10 +710,10 @@ abstract public class SdlRouterBase extends Service {
 		}
 		if(notification == null){
 			Log.e(TAG, "Notification was null");
-		} else {
-			startForeground(FOREGROUND_SERVICE_ID, notification);
-			isForeground = true;
 		}
+		startForeground(FOREGROUND_SERVICE_ID, notification);
+		isForeground = true;
+
 	}
 
 	void exitForeground(){
@@ -753,7 +741,7 @@ abstract public class SdlRouterBase extends Service {
 	}
 
 
-	public String getConnectedDeviceName(){
+	public  String getConnectedDeviceName(){
 		return connectedDeviceName;
 	}
 
@@ -783,18 +771,21 @@ abstract public class SdlRouterBase extends Service {
 		Handler queueWaitHandler= null;
 		Runnable queueWaitRunnable = null;
 		boolean queuePaused = false;
+		private final TransportType transportType;
 
 		/**
 		 * This is a simple class to hold onto a reference of a registered app.
 		 * @param appId
 		 * @param messenger
+		 * @param theType
 		 */
-		public RegisteredApp(String appId, Messenger messenger){
+		public RegisteredApp(String appId, Messenger messenger, TransportType theType){
 			this.appId = appId;
 			this.messenger = messenger;
 			this.sessionIds = new Vector<Long>();
 			this.queue = new PacketWriteTaskBlockingQueue();
 			queueWaitHandler = new Handler();
+			transportType = theType;
 			setDeathNote();
 		}
 
@@ -871,8 +862,8 @@ abstract public class SdlRouterBase extends Service {
 		public boolean handleIncommingClientMessage(final Bundle receivedBundle){
 			//Log.d(TAG, "handleIncommingClientMessage");
 			int flags = receivedBundle.getInt(TransportConstants.BYTES_TO_SEND_FLAGS, TransportConstants.BYTES_TO_SEND_FLAG_NONE);
-			//Log.d(TAG, "Flags received: " + flags);
-			if(flags!= TransportConstants.BYTES_TO_SEND_FLAG_NONE){
+			DebugTool.logInfo("handleIncomingMessage: Flags received: " + flags);
+			if(flags!=TransportConstants.BYTES_TO_SEND_FLAG_NONE){
 				byte[] packet = receivedBundle.getByteArray(TransportConstants.BYTES_TO_SEND_EXTRA_NAME);
 				if(flags == TransportConstants.BYTES_TO_SEND_FLAG_LARGE_PACKET_START){
 					this.prioirtyForBuffingMessage = receivedBundle.getInt(TransportConstants.PACKET_PRIORITY_COEFFICIENT,0);
@@ -881,7 +872,7 @@ abstract public class SdlRouterBase extends Service {
 			}else{
 				//Add the write task on the stack
 				if(queue!=null){
-					queue.add(new PacketWriteTask(receivedBundle));
+					queue.add(new PacketWriteTask(receivedBundle, getTransportType()));
 					if(packetWriteTaskMaster!=null){
 						packetWriteTaskMaster.alert();
 					} else {
@@ -922,7 +913,7 @@ abstract public class SdlRouterBase extends Service {
 				if (buffer.isFinished()) { //We are finished building the buffer so we should write the bytes out
 					byte[] bytes = buffer.getBytes();
 					if (queue != null) {
-						queue.add(new PacketWriteTask(bytes, 0, bytes.length, this.prioirtyForBuffingMessage));
+						queue.add(new PacketWriteTask(bytes, 0, bytes.length, this.prioirtyForBuffingMessage, getTransportType()));
 						if (packetWriteTaskMaster != null) {
 							packetWriteTaskMaster.alert();
 						}
@@ -930,6 +921,10 @@ abstract public class SdlRouterBase extends Service {
 					buffer.close();
 				}
 			}
+		}
+
+		public TransportType getTransportType() {
+			return transportType;
 		}
 
 		protected PacketWriteTask peekNextTask(){
@@ -1029,7 +1024,7 @@ abstract public class SdlRouterBase extends Service {
 	 * @author Joey Grover
 	 *
 	 */
-	class PacketWriteTask implements Runnable {
+	class PacketWriteTask implements Runnable{
 		private static final long DELAY_CONSTANT = 500; //250ms
 		private static final long SIZE_CONSTANT = 1000; //1kb
 		private static final long PRIORITY_COEF_CONSTATNT = 500;
@@ -1040,34 +1035,36 @@ abstract public class SdlRouterBase extends Service {
 		public int offset, size, priorityCoefficient;
 		private final long timestamp;
 		final Bundle receivedBundle;
-		private ITransportWriter transportWriter;
+		private final TransportType transportType;
 
-		public PacketWriteTask(byte[] bytes, int offset, int size, int priorityCoefficient) {
+		public PacketWriteTask(byte[] bytes, int offset, int size, int priorityCoefficient, TransportType theType) {
 			timestamp = System.currentTimeMillis();
 			bytesToWrite = bytes;
 			this.offset = offset;
 			this.size = size;
 			this.priorityCoefficient = priorityCoefficient;
 			receivedBundle = null;
+			transportType = theType;
 		}
 
-		public PacketWriteTask(Bundle bundle){
+		public PacketWriteTask(Bundle bundle, TransportType theType){
 			this.receivedBundle = bundle;
 			timestamp = System.currentTimeMillis();
 			bytesToWrite = bundle.getByteArray(TransportConstants.BYTES_TO_SEND_EXTRA_NAME);
 			offset = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_OFFSET, 0); //If nothing, start at the begining of the array
 			size = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_COUNT, bytesToWrite.length);  //In case there isn't anything just send the whole packet.
 			this.priorityCoefficient = bundle.getInt(TransportConstants.PACKET_PRIORITY_COEFFICIENT,0); //Log.d(TAG, "packet priority coef: "+ this.priorityCoefficient);
+			transportType = theType; // default type.
 		}
 
 		@Override
 		public void run() {
 			if(receivedBundle!=null){
 				//Log.d("PacketWriteTask", "writeBytesToTransport");
-				mWriter.writeBytesToTransport(receivedBundle);
+				mWriterMap.get(transportType).writeBytesToTransport(receivedBundle);
 			}else if(bytesToWrite !=null){
 				//Log.d("PacketWriteTask", String.format("manuallyWriteBytes %d bytes", size));
-				mWriter.manuallyWriteBytes(bytesToWrite, offset, size);
+				mWriterMap.get(transportType).manuallyWriteBytes(bytesToWrite, offset, size);
 			}
 		}
 
@@ -1082,8 +1079,8 @@ abstract public class SdlRouterBase extends Service {
 	 * @author Joey Grover
 	 *
 	 */
-	class PacketWriteTaskMaster extends Thread {
-		protected final Object QUEUE_LOCK = new Object();
+	class PacketWriteTaskMaster extends Thread{
+		protected final  Object QUEUE_LOCK = new Object();
 		private boolean isHalted = false, isWaiting = false;
 
 		public PacketWriteTaskMaster(){
@@ -1317,7 +1314,7 @@ abstract public class SdlRouterBase extends Service {
 			data = pm.getData();
 		}
 
-		SdlPacket packet = new SdlPacket(version,false, SdlPacket.FRAME_TYPE_SINGLE, SdlPacket.SERVICE_TYPE_RPC,0,sessionId,data.length,data.length+100,data);
+		SdlPacket packet = new SdlPacket(version,false,SdlPacket.FRAME_TYPE_SINGLE,SdlPacket.SERVICE_TYPE_RPC,0,sessionId,data.length,data.length+100,data);
 		return packet.constructPacket();
 	}
 

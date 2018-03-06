@@ -5,6 +5,8 @@ import android.os.Looper;
 import android.os.Messenger;
 import android.test.AndroidTestCase;
 
+import com.smartdevicelink.transport.enums.TransportType;
+
 
 /**
  * Created by brettywhite on 4/4/17.
@@ -24,7 +26,7 @@ public class RegisteredAppTests extends AndroidTestCase {
 
         // Instantiate SdlRouterService and Registered App class
         SdlRouterService router = new SdlRouterService();
-        SdlRouterService.RegisteredApp app = router.new RegisteredApp(APP_ID, messenger);
+        SdlRouterService.RegisteredApp app = router.new RegisteredApp(APP_ID, messenger, TransportType.MULTIPLEX);
 
         // Call Handle Message
         app.handleMessage(TransportConstants.BYTES_TO_SEND_FLAG_LARGE_PACKET_START,bytes);
@@ -43,7 +45,7 @@ public class RegisteredAppTests extends AndroidTestCase {
 
         // Instantiate SdlRouterService and Registered App class
         SdlRouterService router = new SdlRouterService();
-        SdlRouterService.RegisteredApp app = router.new RegisteredApp(APP_ID, messenger);
+        SdlRouterService.RegisteredApp app = router.new RegisteredApp(APP_ID, messenger, TransportType.MULTIPLEX);
 
         // Force Null Buffer
         app.buffer = null;

@@ -42,7 +42,8 @@ public class TransportBroker {
 	
 	private final Object INIT_LOCK = new Object();
 	
-	private TransportType queuedOnTransportConnect = null;
+	//private TransportType queuedOnTransportConnect = null;
+	private final TransportType mTransportType;
 	
 	Messenger routerServiceMessenger = null;
 	final Messenger clientMessenger;
@@ -57,7 +58,7 @@ public class TransportBroker {
 	
 	private ServiceConnection routerConnection;
 	private int routerServiceVersion = 1;
-	
+
 	private void initRouterConnection(){
 		routerConnection= new ServiceConnection() {
 
@@ -182,6 +183,7 @@ public class TransportBroker {
 							if(bundle.containsKey(TransportConstants.HARDWARE_CONNECTED)){
 								broker.onHardwareConnected(TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED)));
 							} else if (bundle.containsKey(TransportConstants.HARDWARE_CONNECTED_AOA)) {
+								DebugTool.logInfo("HARDWARE_CONNECTED_AOA");
 								TransportType transportType = TransportType.valueOf(bundle.getString(TransportConstants.HARDWARE_CONNECTED_AOA));
 								broker.onHardwareConnected(transportType);
 								provider.get().sendUsbAttachedToRouter(transportType);
@@ -267,7 +269,7 @@ public class TransportBroker {
             	case TransportConstants.HARDWARE_CONNECTION_EVENT:
         			if(bundle.containsKey(TransportConstants.HARDWARE_DISCONNECTED)){
         				//We should shut down, so call 
-        				Log.d(TAG, "Hardware disconnected");
+        				DebugTool.logInfo("Hardware disconnected");
         				if(isLegacyModeEnabled()){
         					broker.onLegacyModeEnabled();
         				}else{
@@ -308,9 +310,10 @@ public class TransportBroker {
 			
 		
 		@SuppressLint("SimpleDateFormat")
-		public TransportBroker(Context context, String appId, ComponentName service){
+		public TransportBroker(Context context, String appId, ComponentName service, TransportType transportType){
 			synchronized(INIT_LOCK){
 				clientMessenger = new Messenger(new ClientHandler(this));
+				mTransportType = transportType;
 				initRouterConnection();
 				//So the user should have set the AppId, lets define where the intents need to be sent
 				SimpleDateFormat s = new SimpleDateFormat("hhmmssss"); //So we have a time stamp of the event
@@ -323,7 +326,6 @@ public class TransportBroker {
 					}
 				}
 				this.appId = appId.concat(timeStamp);
-				queuedOnTransportConnect = null;
 				currentContext = context;
 				//Log.d(TAG, "Registering our reply receiver: " + whereToReply);
 				this.routerService = service;
@@ -333,7 +335,7 @@ public class TransportBroker {
 		/**
 		 * This beings the initial connection with the router service.
 		 */
-		public boolean start(TransportType type){
+		public boolean start(){
 			Log.d(TAG, "Starting up transport broker for " + whereToReply);
 			synchronized(INIT_LOCK){
 				if(currentContext==null){
@@ -344,7 +346,7 @@ public class TransportBroker {
 				}
 				Log.d(TAG, "Registering our reply receiver: " + whereToReply);
 				if(!isBound){
-					return registerWithRouterService(type);
+					return registerWithRouterService();
 				}else{
 					return false;
 				}
@@ -355,7 +357,6 @@ public class TransportBroker {
 			synchronized(INIT_LOCK){
 				unregisterWithRouterService();
 				routerServiceMessenger = null;
-				queuedOnTransportConnect = null;
 				unBindFromRouterService();
 			}
 		}
@@ -368,7 +369,6 @@ public class TransportBroker {
 				unregisterWithRouterService();
 				unBindFromRouterService();
 				routerServiceMessenger = null;
-				queuedOnTransportConnect = null;
 				currentContext = null;
 				
 			}
@@ -392,15 +392,14 @@ public class TransportBroker {
 		private static boolean mUsbConnected = false;
 		
 		public void onServiceUnregsiteredFromRouterService(int unregisterCode){
-			queuedOnTransportConnect = null;
 		}
 		
 		public void onHardwareDisconnected(TransportType type){
+			DebugTool.logInfo("TransportBroker:onHardwareDisconnected " + type.name());
 			synchronized(INIT_LOCK){
 				unBindFromRouterService();
 				routerServiceMessenger = null;
 				routerConnection = null;
-				queuedOnTransportConnect = null;
 				if (type == TransportType.USB || type == TransportType.MULTIPLEX_AOA) {
 					mUsbConnected = false;
 				}
@@ -413,7 +412,6 @@ public class TransportBroker {
 					return mUsbConnected;
 				} else {
 					if (routerServiceMessenger == null) {
-						queuedOnTransportConnect = type;
 						return false;
 					}
 					return true;
@@ -455,15 +453,10 @@ public class TransportBroker {
 			ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
 		    for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
 		    	//We will check to see if it contains this name, should be pretty specific
-				if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME) && type == TransportType.MULTIPLEX) {
+				if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME) && (type == TransportType.MULTIPLEX || type == TransportType.MULTIPLEX_AOA)) {
 					this.routerClassName = service.service.getClassName();
 					this.routerPackage = service.service.getPackageName();
 					DebugTool.logInfo("found router service for BT: package=" + this.routerPackage + " : class=" + this.routerClassName);
-					return true;
-				} else if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME) && type == TransportType.MULTIPLEX_AOA) {
-					this.routerClassName = service.service.getClassName();
-					this.routerPackage = service.service.getPackageName();
-					DebugTool.logInfo("found router service for AOA: package=" + this.routerPackage + " : class=" + this.routerClassName);
 					return true;
 				}
 		    }			
@@ -523,7 +516,7 @@ public class TransportBroker {
 		/**
 		 * This registers this service with the router service
 		 */
-		private boolean registerWithRouterService(final TransportType type){
+		private boolean registerWithRouterService(){
 			if(getContext()==null){
 				Log.e(TAG, "Context set to null, failing out");
 				return false;
@@ -535,7 +528,7 @@ public class TransportBroker {
 			}
 			//Make sure we know where to bind to
 			if(this.routerService==null){ 
-				if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isRouterServiceRunning(getContext(), type)){//We should be able to ignore this case because of the validation now
+				if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isRouterServiceRunning(getContext(), mTransportType)){//We should be able to ignore this case because of the validation now
 					Log.d(TAG,whereToReply + " found no router service. Shutting down.");
 					this.onHardwareDisconnected(null);
 					return false;
@@ -544,11 +537,7 @@ public class TransportBroker {
 						@Override
 						public void onComplete(Vector<ComponentName> routerServices) {
 							for (ComponentName name: routerServices) {
-								if (type.equals(TransportType.MULTIPLEX_AOA) && name.getClassName().contains("AoaRouter")) {
-									routerPackage = name.getPackageName();
-									routerClassName = name.getClassName();
-									break;
-								} else if (type.equals(TransportType.MULTIPLEX) && name.getClassName().contains("Router")) {
+								if ((mTransportType.equals(TransportType.MULTIPLEX) || mTransportType.equals(TransportType.MULTIPLEX_AOA)) && name.getClassName().contains("Router")) {
 									routerPackage = name.getPackageName();
 									routerClassName = name.getClassName();
 									break;
@@ -584,7 +573,11 @@ public class TransportBroker {
 					return false;
 				}
 				getContext().startService(bindingIntent); // this may causes security exception if the service is not exported.
-				bindingIntent.setAction( TransportConstants.BIND_REQUEST_TYPE_CLIENT);
+				if (mTransportType.equals(TransportType.MULTIPLEX_AOA)) {
+					bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_AOA_CLIENT);
+				} else {
+					bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_CLIENT);
+				}
 				return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
 			}else{
 				DebugTool.logError("routerPackage or Classname is null");

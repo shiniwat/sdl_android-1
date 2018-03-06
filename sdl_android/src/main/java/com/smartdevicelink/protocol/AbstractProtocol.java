@@ -139,6 +139,7 @@ public abstract class AbstractProtocol {
 	// listener.
 	protected void handleProtocolError(String string, Exception ex) {
 		_protocolListener.onProtocolError(string, ex);
+		ex.printStackTrace();
 	}
     protected void handleProtocolHeartbeat(SessionType sessionType, byte sessionID) {
     	SendHeartBeatACK(sessionID);

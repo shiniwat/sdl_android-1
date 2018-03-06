@@ -81,14 +81,14 @@ public class MultiplexAOATransport {
 	}
 
 
-	private final UsbManager mUsbManager;
+	//private final UsbManager mUsbManager;
 	private static int mMuxState;
 	private UsbState mUsbState;
 	private Handler mHandler;
 	private static MultiplexAOATransport mInstance = null;
 	private Context mContext;
 	private ParcelFileDescriptor mParcelFD;
-	private static UsbAccessory mAccessory = null;
+	//private static UsbAccessory mAccessory = null;
 	private InputStream mInputStream;
 	private OutputStream mOutputStream;
 	private Thread mReaderThread = null;
@@ -107,7 +107,7 @@ public class MultiplexAOATransport {
 		mContext = context;
 		mMuxState = MUX_STATE_NONE;
 		mUsbState = UsbState.IDLE;
-		mUsbManager = (UsbManager)context.getSystemService(Context.USB_SERVICE);
+		//mUsbManager = (UsbManager)context.getSystemService(Context.USB_SERVICE);
 		mHandler = handler;
 	}
 
@@ -119,20 +119,48 @@ public class MultiplexAOATransport {
 		return mInstance;
 	}
 
-	public void start() {
+	public boolean isConnected() {
+		return mUsbState == UsbState.CONNECTED;
+	}
+
+	public void start(Context context) {
 		if (mMuxState != MUX_STATE_CONNECTED) {
-			setMuxState(MUX_STATE_LISTEN);
-			mUsbState = UsbState.LISTENING; // @REVIEW
+			setState(MUX_STATE_LISTEN);
+			mUsbState = UsbState.LISTENING;
 		}
-		registerReciever(mContext);
+		UsbAccessoryDriver.init(context);
+		UsbAccessoryDriver.getInstance().setAccessoryHandler(new UsbAccessoryDriver.IAccessoryHandler() {
+			@Override
+			public void accessoryConnected() {
+				DebugTool.logInfo("MultiplexAOAransport: accessoryConnected; state=" + mUsbState.name());
+				if (mUsbState == UsbState.LISTENING) {
+					startReaderThread();
+					// also send broadcast
+					Intent intent = new Intent(TransportConstants.AOA_ROUTER_OPEN_ACCESSORY);
+					mContext.sendBroadcast(intent);
+				}
+			}
+
+			@Override
+			public void accessoryDisconnected() {
+				DebugTool.logInfo("MultiplexAOATransport: accessoryDisconnected");
+				setState(MUX_STATE_LISTEN);
+				mUsbState = UsbState.LISTENING;
+			}
+		});
+		UsbAccessoryDriver.getInstance().start();
+		//registerReciever(mContext);
 	}
 
 	public void stop() {
-		setMuxState(MUX_STATE_NONE);
-		mAccessory = null;
-		unregisterReceiver(mContext);
+		UsbAccessoryDriver.getInstance().stop();
+		setState(MUX_STATE_NONE);
+		mUsbState = UsbState.IDLE;
+		//mAccessory = null;
+		//unregisterReceiver(mContext);
 	}
 
+	/*--
 	private void registerReciever(Context context) {
 		IntentFilter filter = new IntentFilter();
 		filter.addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED);
@@ -145,7 +173,7 @@ public class MultiplexAOATransport {
 
 	private void unregisterReceiver(Context context) {
 		if (mUSBReceiver != null) {
-			context.unregisterReceiver(mUSBReceiver);
+			context.unregisterReceiver(mUSBReceiver);n
 		}
 	}
 
@@ -159,6 +187,7 @@ public class MultiplexAOATransport {
 				// Because AOA router service is launched in response to UAB_ACCESSORY_ATTACHED broadcast,
 				// the following code won't be called.
 				if (action.equals(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)) {
+					DebugTool.logInfo("");
 					if (isAccessorySupported(accessory)) {
 						connectToAccessory(accessory);
 					}
@@ -171,13 +200,13 @@ public class MultiplexAOATransport {
 						mReaderThread = null;
 					}
 					// tell service that we are disconnected.
-					setMuxState(MUX_STATE_NONE);
+					setState(MUX_STATE_NONE);
 					mUsbState = UsbState.LISTENING;
 					mAccessory = null;
 					mHandler.postDelayed(new Runnable() {
 						@Override
 						public void run() {
-							setMuxState(MUX_STATE_LISTEN);
+							setState(MUX_STATE_LISTEN);
 						}
 					}, 1000);
 				} else if (action.equals(ACTION_USB_PERMISSION)) {
@@ -196,35 +225,13 @@ public class MultiplexAOATransport {
 		return manufacturerMatches && modelMatches && versionMatches;
 	}
 
-	public void connectToAccessory(UsbAccessory accessory) {
-		if (mAccessory != null) {
-			return;
-		}
-		DebugTool.logInfo("connectToAccessory");
-		if (mUsbState == UsbState.LISTENING) {
-			if (mUsbManager.hasPermission(accessory)) {
-				openAccessory(accessory);
-			} else {
-				DebugTool.logInfo("About requestPermission");
-				PendingIntent intent = PendingIntent.getBroadcast(mContext, 0, new Intent(ACTION_USB_PERMISSION), 0);
-				mUsbManager.requestPermission(accessory, intent);
-			}
-		}
+	public void connectToAccessory() {
+		//if (mAccessory != null) {
+		//	return;
+		//}
+		UsbAccessoryDriver.getInstance().connect();
 	}
-
-	private void openAccessory(UsbAccessory accessory) {
-		if (mAccessory != null) {
-			return;
-		}
-		DebugTool.logInfo("MultiplexAOAransport: openAccessory");
-		if (mUsbState == UsbState.LISTENING) {
-			mAccessory = accessory;
-			startReaderThread();
-			// also send broadcast
-			Intent intent = new Intent(TransportConstants.AOA_ROUTER_OPEN_ACCESSORY);
-			mContext.sendBroadcast(intent);
-		}
-	}
+	--*/
 
 	private void startReaderThread() {
 		DebugTool.logInfo("startReaderThread");
@@ -234,11 +241,11 @@ public class MultiplexAOATransport {
 		mReaderThread.start();
 	}
 
-	public int getMuxState() {
+	public int getState() {
 		return mMuxState;
 	}
 
-	public synchronized void setMuxState(int newState) {
+	public synchronized void setState(int newState) {
 		int previousState = mMuxState;
 		mMuxState = newState;
 		mHandler.obtainMessage(SdlRouterService.MESSAGE_STATE_CHANGE, newState, 0).sendToTarget();
@@ -306,11 +313,13 @@ public class MultiplexAOATransport {
 			if (Thread.interrupted()) {
 				return false;
 			}
-			if (mUsbState == UsbState.LISTENING && mAccessory != null) {
+			if (mUsbState == UsbState.LISTENING) { // && mAccessory != null) {
 				synchronized (this) {
 					mUsbState = UsbState.CONNECTED;
-					setMuxState(MUX_STATE_CONNECTED);
-					mParcelFD = mUsbManager.openAccessory(mAccessory);
+					DebugTool.logInfo("MultiplexUSBTransportReader: set MUX_STATE_CONNECTED");
+					setState(MUX_STATE_CONNECTED);
+					//mParcelFD = mUsbManager.openAccessory(mAccessory);
+					mParcelFD = UsbAccessoryDriver.getInstance().getAccessoryFD();
 					if (mParcelFD != null) {
 						DebugTool.logInfo("ParcelFD=" + mParcelFD.toString());
 						FileDescriptor fd = mParcelFD.getFileDescriptor();

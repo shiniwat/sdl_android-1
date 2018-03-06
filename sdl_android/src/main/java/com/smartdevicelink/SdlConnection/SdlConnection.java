@@ -172,12 +172,8 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	 */
 	private ComponentName getServiceComponentFromList(List<ComponentName> list, TransportType transportType) {
 		for (ComponentName service: list) {
-			if (transportType == TransportType.MULTIPLEX) {
+			if (transportType == TransportType.MULTIPLEX || transportType == TransportType.MULTIPLEX_AOA) {
 				if (service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)) {
-					return service;
-				}
-			} else if (transportType == TransportType.MULTIPLEX_AOA) {
-				if (service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
 					return service;
 				}
 			}
@@ -210,9 +206,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 
 
 	public void startTransport() throws SdlException {
-		if (_transport != null) {
-			_transport.openConnection();
-		}
+		_transport.openConnection();
 	}
 
 	public Boolean getIsConnected() {
@@ -347,10 +341,11 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	 * @see TransportType
 	 */
 	public TransportType getCurrentTransportType() {
-		if (_transport == null) {
-			return TransportType.MULTIPLEX;
+		if (_transport != null) {
+			return _transport.getTransportType();
+		} else {
+			return TransportType.UNKNOWN;
 		}
-		return _transport.getTransportType();
 	}
 
 	public void startService (SessionType sessionType, byte sessionID, boolean isEncrypted) {
@@ -370,7 +365,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	}
 	void registerSession(SdlSession registerListener) throws SdlException {
 		boolean didAdd = listenerList.addIfAbsent(registerListener);
-		if (!this.getIsConnected()) {
+		if (!this.getIsConnected() && _transport != null) {
 			this.startTransport();
 		} else {
 			if(didAdd && _transport !=null  && (_transport.getTransportType()== TransportType.MULTIPLEX || _transport.getTransportType() == TransportType.MULTIPLEX_AOA)){ //If we're connected we can request the extra session now

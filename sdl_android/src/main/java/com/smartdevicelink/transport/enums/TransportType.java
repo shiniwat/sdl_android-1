@@ -23,6 +23,8 @@ public enum TransportType {
 	 */
 	USB,
 	MULTIPLEX_AOA,
+	// UNKNOWN means underlying transport is NOT connected.
+	UNKNOWN,
 	// **/;
 	;
 	

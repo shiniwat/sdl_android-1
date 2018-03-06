@@ -45,7 +45,7 @@ public class RouterServiceValidator {
 
 	private static final String REQUEST_PREFIX = "https://woprjr.smartdevicelink.com/api/1/applications/queryTrustedRouters"; 
 
-	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }  }}";
+	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] } }}";
 	
 	
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
@@ -85,7 +85,7 @@ public class RouterServiceValidator {
 	private boolean inDebugMode = false;
 	@SuppressWarnings("unused")
 	private static boolean pendingListRefresh = false;
-
+	
 	private List<ComponentName> services;//This is how we can save different routers over another in a waterfall method if we choose to.
 
 	private static int securityLevel = -1;
@@ -109,15 +109,14 @@ public class RouterServiceValidator {
 	 * @return whether or not the currently running router service can be trusted.
 	 */
 	public boolean validate(TransportType transportType){
-
 		if(securityLevel == -1){
 			securityLevel = getSecurityLevel(context);
 		}
-		
+
 		if(securityLevel == MultiplexTransportConfig.FLAG_MULTI_SECURITY_OFF){ //If security isn't an issue, just return true;
 			return true;
 		}
-		
+
 		PackageManager pm = context.getPackageManager();
 		//Grab the package for the currently running router service. We need this call regardless of if we are in debug mode or not.
 		String packageName = null;
@@ -138,24 +137,37 @@ public class RouterServiceValidator {
 				}
 			}
 		}
-		if(this.services.size() == 0){
-			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
+		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
+			if(this.services.size() == 0) {
 				this.services = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
-				if(this.services.size() == 0) { //if this is still null we know there is no service running so we can return false
-					wakeUpRouterServices(transportType);
-					DebugTool.logInfo("No router found. validate returns false");
-					return false;
-				}
-			} else {
+			}
+			if (this.services.size() == 0) { //if this is still null we know there is no service running so we can return false
 				wakeUpRouterServices(transportType);
+				DebugTool.logInfo("No router found. validate returns false");
 				return false;
 			}
-
+		} else {
+			// On Android 8, we cannot query PackageManager to get the info.
+			// The following code requires RouterService has intent-filter defined in the manifest.
+			// For Xevo CTS apps, do this in GCAPP
+			if (this.services.size() == 0 || packageName == null) {
+				Intent routerServiceIntent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
+				List<ResolveInfo> serviceInfos = this.context.getPackageManager().queryIntentServices(routerServiceIntent, 0);
+				if (serviceInfos.size() > 0) {
+					packageName = serviceInfos.get(0).serviceInfo.packageName;
+					String className = serviceInfos.get(0).serviceInfo.name; // service's name tag usually use class name.
+					this.services.add(new ComponentName(packageName, className));
+				} else {
+					wakeUpRouterServices(transportType);
+					return false;
+				}
+			}
 		}
 
 		for (ComponentName service : services) {
 			//Log.d(TAG, "Checking app package: " + service.getClassName());
 			packageName = this.appPackageForComponentName(service, pm);
+
 
 			if(packageName!=null){//Make sure there is a service running
 				if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
@@ -173,7 +185,7 @@ public class RouterServiceValidator {
 	}
 
 	/**
-	 * This will ensure that all router services are aware that there are no valid router services running and should start up 
+	 * This will ensure that all router services are aware that there are no valid router services running and should start up
 	 */
 	private void wakeUpRouterServices(TransportType transportType){
 		DebugTool.logInfo("wakeUpRouterService transportType=" + transportType.toString());
@@ -182,17 +194,24 @@ public class RouterServiceValidator {
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
 			context.sendBroadcast(intent);
-		} else if (transportType == TransportType.MULTIPLEX_AOA && SdlAoaRouterService.shouldServiceRemainOpen(this.context)) {
+		} else if (transportType == TransportType.MULTIPLEX_AOA) {// && SdlRouterService.shouldServiceRemainOpen(this.context)) {
+			// @TODO: we may need to check if USB is connected here.
 			Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
 			context.sendBroadcast(intent);
+			/*--
+		} else if (transportType == TransportType.MULTIPLEX_AOA && XevoSlipRouterService.shouldServiceRemainOpen(this.context)) {
+			Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
+			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
+			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
+			context.sendBroadcast(intent);
+			--*/
 		}
 	}
 	public List<ComponentName> getServices(){
 		return this.services;
 	}
-
 
 	private boolean shouldOverrideVersionCheck(){
 		return (this.inDebugMode && ((this.flags & FLAG_DEBUG_VERSION_CHECK) != FLAG_DEBUG_VERSION_CHECK));
@@ -252,7 +271,7 @@ public class RouterServiceValidator {
 		}
 		ActivityManager manager = (ActivityManager) context.getSystemService("activity");
 		//PackageManager pm = context.getPackageManager();
-
+		
 		List<ComponentName> list = new ArrayList<ComponentName>();
 		for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
 			//Log.d(TAG, service.service.getClassName());
@@ -262,10 +281,10 @@ public class RouterServiceValidator {
 				if(service.started && service.restarting==0){ //If this service has been started and is not crashed
 					list.add(service.service); //appPackageForComponenetName(service.service,pm);
 				}
-			} else if (service.service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
-				if(service.started && service.restarting==0){ //If this service has been started and is not crashed
-					list.add(service.service); //appPackageForComponenetName(service.service,pm);
-				}
+			//} else if (service.service.getClassName().toLowerCase().contains(SdlBroadcastReceiver.SDL_AOA_ROUTER_SERVICE_CLASS_NAME)) {
+			//	if(service.started && service.restarting==0){ //If this service has been started and is not crashed
+			//		list.add(service.service); //appPackageForComponenetName(service.service,pm);
+			//	}
 			}
 		}
 
@@ -385,7 +404,6 @@ public class RouterServiceValidator {
 	 * @return 
 	 */
 	private static List<SdlApp> findAllSdlApps(Context context){
-		DebugTool.logInfo("findAllSdlApps");
 		List<SdlApp> apps = new ArrayList<SdlApp>();
 		PackageManager packageManager = context.getPackageManager();
 		Intent intent = new Intent();
@@ -425,7 +443,7 @@ public class RouterServiceValidator {
 	public static boolean createTrustedListRequest(final Context context, boolean forceRefresh){
 		return createTrustedListRequest(context,forceRefresh,null,null);
 	}
-	public static boolean createTrustedListRequest(final Context context, boolean forceRefresh, TrustedListCallback listCallback){Log.d(TAG,"Checking to make sure we have a list");
+	public static boolean createTrustedListRequest(final Context context, boolean forceRefresh, TrustedListCallback listCallback){DebugTool.logInfo("Checking to make sure we have a list");
 		return createTrustedListRequest(context,forceRefresh,null,listCallback);
 	}
 	
@@ -479,7 +497,7 @@ public class RouterServiceValidator {
 				}
 				return false;
 			}else{
-				Log.d(TAG, "Sdl apps have changed. Need to request new trusted router service list.");
+				DebugTool.logInfo("Sdl apps have changed. Need to request new trusted router service list.");
 			}
 		}
 		
@@ -577,7 +595,7 @@ public class RouterServiceValidator {
 		if(jsonString!=null && context!=null){
 			JSONObject json = stringToJson(jsonString);
 			if (json.length() == 0) {
-				jsonString = DEFAULT_APP_LIST; // fallback for debug purpose.
+				jsonString = DEFAULT_APP_LIST;
 			}
 			SharedPreferences pref = context.getSharedPreferences(SDL, Context.MODE_PRIVATE);
 			// Write the new prefs
