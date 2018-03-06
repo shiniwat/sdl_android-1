@@ -1,0 +1,66 @@
+<configuration>
+    <!-- If putting configuration in other places then use the includes tag
+    <includes>
+        <include file="/sdcard/foo.xml"/>
+        <include resource="assets/config/test.xml"/>
+        <include resource="AndroidManifest.xml"/>
+    </includes>
+    -->
+
+    <!-- New conversion rule to convert a Thread to its ID -->
+    <!--
+    <conversionRule conversionWord="threadId"
+        converterClass="uie.multiaccess.util.logback.ThreadIdConverter" />
+    <conversionRule conversionWord="tId"
+        converterClass="uie.multiaccess.util.logback.ThreadIdConverter" />
+        -->
+
+    <appender name="LOGCAT" class="ch.qos.logback.classic.android.LogcatAppender">
+        <!-- See docs on PatternLayout http://logback.qos.ch/manual/layouts.html#PatternLayout -->
+        <encoder>
+            <pattern>%msg</pattern>
+        </encoder>
+        <tagEncoder>
+            <pattern>%logger:</pattern>
+        </tagEncoder>
+    </appender>
+
+    <!-- Requires android.permission.WRITE_EXTERNAL_STORAGE permission before Android 4.4 -->
+    <property name="EXT_FILES_DIR" value="${EXT_DIR:-/sdcard}/Android/data/${PACKAGE_NAME}/files"/>
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${EXT_FILES_DIR}/logback/sdl_proxy_debug.log</file>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${EXT_FILES_DIR}/logback/sdl_proxy_debug_%i.log.zip</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>4</maxIndex>
+        </rollingPolicy>
+
+
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>5MB</maxFileSize>
+        </triggeringPolicy>
+
+        <!-- See docs on PatternLayout http://logback.qos.ch/manual/layouts.html#PatternLayout -->
+        <encoder>
+            <pattern>%d{ISO8601} %6level / %-8logger{23} %class{0}.%method: %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logback's TRACE level is equivalent to android.util.Log.VERBOSE level -->
+
+    <!-- Examples to enable or disable specific loggers or classes of loggers -->
+    <logger name="SDL" level="DEBUG" />
+
+    <!-- Control logging for any "class" logger under uie.multiaccess,
+         i.e. one created by a call like UMALog.getLogger(UMAFooClass.class); -->
+    <logger name="sdl.debugtool" level="INFO" />
+
+    <!-- Turn general logging off (3rd party libraries may use logback but we
+         don't necessarily want to see their logging output -->
+    <root level="ON">
+        <appender-ref ref="LOGCAT" />
+        <appender-ref ref="FILE" />
+    </root>
+
+</configuration>

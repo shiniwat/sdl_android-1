@@ -15,6 +15,9 @@ import com.smartdevicelink.proxy.RPCStruct;
 import com.smartdevicelink.proxy.Version;
 import com.smartdevicelink.transport.SiphonServer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Hashtable;
 import java.util.Vector;
 
@@ -26,11 +29,13 @@ public class DebugTool {
 	private static boolean isErrorEnabled = false;
 	private static boolean isWarningEnabled = false;
 	private static boolean isInfoEnabled = false;
+	private static Logger mLogger;
 	
 	public static void enableDebugTool() {
 		isErrorEnabled = true;
 		isWarningEnabled = true;
 		isInfoEnabled = true;
+		mLogger = LoggerFactory.getLogger("SDL");
 	}
 
 	public static void disableDebugTool() {
@@ -48,7 +53,7 @@ public class DebugTool {
 	
 	private static String prependProxyVersionNumberToString(String string) {
 		if (Version.VERSION != null && string != null) {
-			string = Version.VERSION + ": " + string;
+			//string = Version.VERSION + ": " + string;
 		}
 		
 		return string;
@@ -63,7 +68,8 @@ public class DebugTool {
 		wasWritten = logToSiphon(msg);
 		
 		if (isErrorEnabled && !wasWritten) {
-			NativeLogTool.logError(TAG, msg);
+			//NativeLogTool.logError(TAG, msg);
+			mLogger.error(msg);
 		}
 	}
 
@@ -79,7 +85,8 @@ public class DebugTool {
 		}
 		
 		if (isErrorEnabled && !wasWritten) {
-			NativeLogTool.logError(TAG, msg, ex);
+			//NativeLogTool.logError(TAG, msg, ex);
+			mLogger.error(msg, ex);
 		}
 	}
 	
@@ -91,7 +98,8 @@ public class DebugTool {
 		wasWritten = logToSiphon(msg);
 		
 		if (isWarningEnabled && !wasWritten) {
-			NativeLogTool.logWarning(TAG, msg);
+			//NativeLogTool.logWarning(TAG, msg);
+			mLogger.warn(msg);
 		}
 	}
 
@@ -103,7 +111,8 @@ public class DebugTool {
 		wasWritten = logToSiphon(msg);
 		
 		if (isInfoEnabled && !wasWritten) {
-			NativeLogTool.logInfo(TAG, msg);
+			//NativeLogTool.logInfo(TAG, msg);
+			mLogger.info(msg);
 		}
 	}
 
@@ -115,7 +124,8 @@ public class DebugTool {
 		wasWritten = logToSiphon(msg);
 		
 		if (isInfoEnabled && !wasWritten) {
-			NativeLogTool.logInfo(TAG, msg);
+			//NativeLogTool.logInfo(TAG, msg);
+			mLogger.info(msg);
 		}
 	}
 	
