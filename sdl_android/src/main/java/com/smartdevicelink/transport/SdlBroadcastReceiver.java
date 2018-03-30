@@ -55,7 +55,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	private static final String BOOT_COMPLETE = "android.intent.action.BOOT_COMPLETED";
 	private static final String ACL_CONNECTED = "android.bluetooth.device.action.ACL_CONNECTED";
 	private static final String STATE_CHANGED = "android.bluetooth.adapter.action.STATE_CHANGED" ;
-	
+
 	public static final String SDL_ROUTER_SERVICE_CLASS_NAME 			= "sdlrouterservice";
 	//public static final String SDL_AOA_ROUTER_SERVICE_CLASS_NAME 		= "sdlaoarouterservice";
 
@@ -101,7 +101,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
         		|| action.equalsIgnoreCase(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)
 				|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)
 				|| action.equalsIgnoreCase(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION)
-				|| action.equalsIgnoreCase(SdlRouterBase.REGISTER_NEWER_SERVER_INSTANCE_ACTION))){
+				|| action.equalsIgnoreCase(SdlRouterService.REGISTER_NEWER_SERVER_INSTANCE_ACTION))){
         	//We don't want anything else here if the child class called super and has different intent filters
         	DebugTool.logInfo("Unwanted intent from child class");
         	return;
