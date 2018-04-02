@@ -15,16 +15,12 @@ import com.smartdevicelink.util.DebugTool;
 import android.annotation.TargetApi;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningServiceInfo;
-import android.app.AppOpsManager;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Build;
@@ -34,19 +30,18 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 
+import com.smartdevicelink.R;
 import com.smartdevicelink.transport.RouterServiceValidator.TrustedListCallback;
 import com.smartdevicelink.util.AndroidTools;
+import com.smartdevicelink.util.SdlAppInfo;
 import com.smartdevicelink.util.ServiceFinder;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static com.smartdevicelink.transport.TransportConstants.FOREGROUND_EXTRA;
 
 public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	
@@ -119,6 +114,17 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		boolean didStart = false;
 		if (localRouterClass == null){
 			localRouterClass = defineLocalSdlRouterClass();
+			ResolveInfo info = context.getPackageManager().resolveService(new Intent(context,localRouterClass),PackageManager.GET_META_DATA);
+			if(info != null){
+					if(info.filter == null || !info.filter.hasAction(TransportConstants.ROUTER_SERVICE_ACTION)){
+						Log.e(TAG, "WARNING: This application has not specified its intent-filter for the SdlRouterService. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+					}
+					if( info.serviceInfo.metaData == null || !info.serviceInfo.metaData.containsKey(context.getString(R.string.sdl_router_service_version_name))) {
+						Log.e(TAG, "WARNING: This application has not specified its metadata tags for the SdlRouterService. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+					}
+			}else{
+				Log.e(TAG, "WARNING: This application has not specified its SdlRouterService correctly in the manifest. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+			}
 		}
 
 		//This will only be true if we are being told to reopen our SDL service because SDL is enabled
@@ -149,10 +155,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 							}
 							
 						});
-						
-						
 					}
-					
 					
 				}else{
 					//This was previously not hooked up, so let's leave it commented out
@@ -199,63 +202,8 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 	    }
 	}
 
-	@TargetApi(Build.VERSION_CODES.O)
-	private boolean wakeUpRouterService(final Context context, boolean ping, final boolean altTransportWake, TransportType transportType){
-		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-			if (!isRouterServiceRunning(context, ping, transportType)) {
-				DebugTool.logInfo("wakeUpRouterService but router service is not running. transportType=" + transportType.toString());
-				//If there isn't a service running we should try to start one
-				//The under class should have implemented this....
-
-				//So let's start up our service since no copy is running
-				if (transportType == TransportType.MULTIPLEX && localRouterClass != null) {
-					DebugTool.logInfo("Router service is not running: BT Router is" + localRouterClass.toString());
-					Intent serviceIntent = new Intent(context, localRouterClass);
-					if (altTransportWake) {
-						serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
-					}
-					try {
-						context.startService(serviceIntent);
-					} catch (SecurityException e) {
-						Log.e(TAG, "Security exception, process is bad");
-						return false; // Let's exit, we can't start the service
-					}
-				} else {
-					DebugTool.logInfo("requested TransportType is NOT BT or localRouterClass is null");
-					return false;
-				}
-
-				/*--
-				if (transportType == TransportType.MULTIPLEX_AOA && localAoaRouterClass != null) {
-					DebugTool.logInfo("Router service is not running: AoaRouter is " + localAoaRouterClass.toString());
-					//if (isForegroundApp(context)) {
-					if (localAoaRouterClass != null) {
-						Intent aoaRouterIntent = new Intent(context, localAoaRouterClass);
-						ComponentName name = context.startService(aoaRouterIntent);
-						DebugTool.logInfo("startService " + name);
-					}
-					//} else {
-					//	DebugTool.logInfo("do not start service because we are not foreground");
-					//}
-				} --*/
-
-				return true;
-			} else {
-				DebugTool.logInfo("wakeUpRouterService but router service runs already");
-				if (altTransportWake && runningRouterServicePackage != null && runningRouterServicePackage.size() > 0) {
-					Intent serviceIntent = new Intent();
-					serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
-					context.startService(serviceIntent);
-					for (ComponentName compName : runningRouterServicePackage) {
-						serviceIntent.setComponent(compName);
-						context.startService(serviceIntent);
-					}
-					return true;
-				}
-				return false;
-			}
-		} else { //We are android Oreo or newer
-			ServiceFinder finder = new ServiceFinder(context, context.getPackageName(), new ServiceFinder.ServiceFinderCallback() {
+	private boolean wakeUpRouterService(final Context context, final boolean ping, final boolean altTransportWake, TransportType transportType){
+			new ServiceFinder(context, context.getPackageName(), new ServiceFinder.ServiceFinderCallback() {
 				@Override
 				public void onComplete(Vector<ComponentName> routerServices) {
 					runningRouterServicePackage = new Vector<ComponentName>();
@@ -272,53 +220,38 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 						//We will try to sort the SDL enabled apps and find the one that's been installed the longest
 						// In case of GCAPP, we should always use GCAPP == localRouterService.
 						Intent serviceIntent;
-						/*--
-						final PackageManager packageManager = context.getPackageManager();
-						Vector<ResolveInfo> apps = new Vector(AndroidTools.getSdlEnabledApps(context, "").values()); //we want our package
-						Log.d(TAG, "getSdlEnabledApps are: " + apps);
-
-						if (apps != null && !apps.isEmpty()) {
-							Collections.sort(apps, new Comparator<ResolveInfo>() {
-								@Override
-								public int compare(ResolveInfo resolveInfo, ResolveInfo t1) {
-									try {
-
-										PackageInfo thisPack = packageManager.getPackageInfo(resolveInfo.activityInfo.packageName, 0);
-										PackageInfo itPack = packageManager.getPackageInfo(t1.activityInfo.packageName, 0);
-										if (thisPack.lastUpdateTime < itPack.lastUpdateTime) {
-											return -1;
-										} else if (thisPack.lastUpdateTime > itPack.lastUpdateTime) {
-											return 1;
-										}
-
-									} catch (PackageManager.NameNotFoundException e) {
-										e.printStackTrace();
-									}
-									return 0;
-								}
-							});
-							String packageName = apps.get(0).activityInfo.packageName;
+						List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(context, new SdlAppInfo.BestRouterComparator());
+						if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
 							serviceIntent = new Intent();
-							serviceIntent.setComponent(new ComponentName(packageName, packageName +".SdlRouterService"));
+							serviceIntent.setComponent(sdlAppInfoList.get(0).getRouterServiceComponentName());
 						} else{
-						--*/
-							Log.d(TAG, "No router service running, starting ours");
-							//So let's start up our service since no copy is running
-							serviceIntent = new Intent(context, localRouterClass);
-
-						//}
+							Log.d(TAG, "No SDL Router Services found");
+							Log.d(TAG, "WARNING: This application has not specified its SdlRouterService correctly in the manifest. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+							return;
+						}
 						if (altTransportWake) {
 							serviceIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_ALT_TRANSPORT);
 						}
 						try {
-							serviceIntent.putExtra(TransportConstants.FOREGROUND_EXTRA, true);
-							context.startForegroundService(serviceIntent);
+							if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+								context.startService(serviceIntent);
+							}else {
+								serviceIntent.putExtra(FOREGROUND_EXTRA, true);
+								context.startForegroundService(serviceIntent);
+
+							}
+							//Make sure to send this out for old apps to close down
+							SdlRouterService.LocalRouterService self = SdlRouterService.getLocalRouterService(serviceIntent, serviceIntent.getComponent());
+							Intent restart = new Intent(SdlRouterService.REGISTER_NEWER_SERVER_INSTANCE_ACTION);
+							restart.putExtra(LOCAL_ROUTER_SERVICE_EXTRA, self);
+							restart.putExtra(LOCAL_ROUTER_SERVICE_DID_START_OWN, true);
+							context.sendBroadcast(restart);
 
 						} catch (SecurityException e) {
 							Log.e(TAG, "Security exception, process is bad");
 						}
 					} else {
-						if (altTransportWake && runningRouterServicePackage != null && runningRouterServicePackage.size() > 0) {
+						if (altTransportWake) {
 							wakeRouterServiceAltTransport(context);
 							return;
 						}
@@ -327,7 +260,6 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 				}
 			});
 			return true;
-		}
 	}
 
 	private void wakeRouterServiceAltTransport(Context context){
@@ -482,31 +414,38 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 				
 		}else{
 			DebugTool.logInfo("Router service isn't running, returning false. for transportType=" + transportType.toString());
-			if(transportType == TransportType.MULTIPLEX && BluetoothAdapter.getDefaultAdapter()!=null && BluetoothAdapter.getDefaultAdapter().isEnabled()){
-				Intent serviceIntent = new Intent();
-				serviceIntent.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
-				serviceIntent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
-				serviceIntent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, TransportType.MULTIPLEX.ordinal());
-	    		context.sendBroadcast(serviceIntent);
-				DebugTool.logInfo("sent Broadcast: START_ROUTER_SERVICE_ACTION for BT");
-				/*--
-			} else if (transportType == TransportType.MULTIPLEX_AOA && XevoSlipRouterService.shouldServiceRemainOpen(context)){
-				Intent routerIntent = new Intent();
-				routerIntent.setAction(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
-				routerIntent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
-				routerIntent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, TransportType.MULTIPLEX_AOA.ordinal());
-				context.sendBroadcast(routerIntent);
-				DebugTool.logInfo("sent Broadcast: START_ROUTER_SERVICE_ACTION for AOA");
-				--*/
+			if(transportType == TransportType.MULTIPLEX) {
+				if(isBluetoothConnected()) {
+					Log.d(TAG, "Bluetooth is connected. Attempting to start Router Service");
+					Intent serviceIntent = new Intent();
+					serviceIntent.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
+					serviceIntent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
+					AndroidTools.sendExplicitBroadcast(context, serviceIntent, null);
+				}
 			}
 			if(callback!=null){
 				callback.onConnectionStatusUpdate(false, null,context);
 			}
 		}
 	}
-	
 
-	
+	@SuppressWarnings({"MissingPermission"})
+	private static boolean isBluetoothConnected() {
+		BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+		if(bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+				int  a2dpState  = bluetoothAdapter.getProfileConnectionState(BluetoothProfile.A2DP);
+				int headSetState  = bluetoothAdapter.getProfileConnectionState(BluetoothProfile.HEADSET);
+
+				return ((a2dpState == BluetoothAdapter.STATE_CONNECTED || a2dpState == BluetoothAdapter.STATE_CONNECTING)
+						&& (headSetState == BluetoothAdapter.STATE_CONNECTED || headSetState == BluetoothAdapter.STATE_CONNECTING));
+			}else{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public static ComponentName consumeQueuedRouterService(){
 		synchronized(QUEUED_SERVICE_LOCK){
 			ComponentName retVal = queuedService;

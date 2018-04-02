@@ -11,7 +11,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.app.ActivityManager;
-import android.app.ActivityManager.RunningServiceInfo;
 import android.bluetooth.BluetoothAdapter;
 import android.content.ComponentName;
 import android.content.Context;
@@ -19,7 +18,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -27,6 +25,7 @@ import android.util.Log;
 
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.DebugTool;
+import com.smartdevicelink.util.AndroidTools;
 import com.smartdevicelink.util.HttpRequestTask;
 import com.smartdevicelink.util.HttpRequestTask.HttpRequestTaskCallback;
 
@@ -193,20 +192,13 @@ public class RouterServiceValidator {
 			Intent intent = new Intent(TransportConstants.START_ROUTER_SERVICE_ACTION);
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
-			context.sendBroadcast(intent);
+			AndroidTools.sendExplicitBroadcast(context,intent,null);
 		} else if (transportType == TransportType.MULTIPLEX_AOA) {// && SdlRouterService.shouldServiceRemainOpen(this.context)) {
 			// @TODO: we may need to check if USB is connected here.
 			Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
 			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
 			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
-			context.sendBroadcast(intent);
-			/*--
-		} else if (transportType == TransportType.MULTIPLEX_AOA && XevoSlipRouterService.shouldServiceRemainOpen(this.context)) {
-			Intent intent = new Intent(TransportConstants.START_AOA_ROUTER_SERVICE_ACTION);
-			intent.putExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA, true);
-			intent.putExtra(TransportConstants.ROUTER_TRANSPORT_TYPE, transportType.ordinal());
-			context.sendBroadcast(intent);
-			--*/
+			AndroidTools.sendExplicitBroadcast(context,intent,null);
 		}
 	}
 	public List<ComponentName> getServices(){
@@ -273,7 +265,7 @@ public class RouterServiceValidator {
 		//PackageManager pm = context.getPackageManager();
 		
 		List<ComponentName> list = new ArrayList<ComponentName>();
-		for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+		for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
 			//Log.d(TAG, service.service.getClassName());
 			//We will check to see if it contains this name, should be pretty specific
 			if (service.service.getClassName().toLowerCase(Locale.US).contains(SdlBroadcastReceiver.SDL_ROUTER_SERVICE_CLASS_NAME)){
@@ -303,7 +295,7 @@ public class RouterServiceValidator {
 			try {
 				info = pm.getServiceInfo(cn, 0);
 				return info.applicationInfo.packageName;
-			} catch (NameNotFoundException e) {
+			} catch (PackageManager.NameNotFoundException e) {
 				e.printStackTrace();
 			}
 		}
@@ -327,7 +319,7 @@ public class RouterServiceValidator {
 				// App was installed by trusted app store
 				return true;
 			}
-		} catch (final NameNotFoundException e) {
+		} catch (final PackageManager.NameNotFoundException e) {
 			e.printStackTrace();
 			return false;
 		}
@@ -354,7 +346,7 @@ public class RouterServiceValidator {
 		}
 
 		int version = -1;
-		try {version = pm.getPackageInfo(packageName,0).versionCode;} catch (NameNotFoundException e1) {e1.printStackTrace(); return false;}
+		try {version = pm.getPackageInfo(packageName,0).versionCode;} catch (PackageManager.NameNotFoundException e1) {e1.printStackTrace(); return false;}
 		
 		JSONObject trustedApps = stringToJson(getTrustedList(context));
 		JSONArray versions;
@@ -423,7 +415,7 @@ public class RouterServiceValidator {
 				packageName = info.activityInfo.packageName;
 				try {
 					apps.add(new SdlApp(packageName,packageManager.getPackageInfo(packageName,0).versionCode));
-				} catch (NameNotFoundException e) {
+				} catch (PackageManager.NameNotFoundException e) {
 					e.printStackTrace();
 				}
 			}
@@ -537,7 +529,7 @@ public class RouterServiceValidator {
 	 */
 	protected boolean isServiceRunning(Context context, ComponentName service){
 		 ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-		    for (RunningServiceInfo serviceInfo : manager.getRunningServices(Integer.MAX_VALUE)) {
+		    for (ActivityManager.RunningServiceInfo serviceInfo : manager.getRunningServices(Integer.MAX_VALUE)) {
 		        if (serviceInfo.service.equals(service)) {
 		            return true;
 		        }
