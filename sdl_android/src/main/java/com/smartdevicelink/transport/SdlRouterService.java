@@ -175,6 +175,7 @@ public class SdlRouterService extends Service{
 		if (bluetoothTransportWriter == null) {
 			bluetoothTransportWriter = new BluetoothTransportWriter(mHandlerBT);
 			bluetoothTransportWriter.init();
+			DebugTool.logInfo("initBluetoothTransportWriter");
 		}
 		setTransportWriter(TransportType.MULTIPLEX, bluetoothTransportWriter);
  	}
@@ -2653,7 +2654,8 @@ public class SdlRouterService extends Service{
 			this.queue = new PacketWriteTaskBlockingQueue();
 			queueWaitHandler = new Handler();
 			transportTypes = new HashMap<>();
-			transportTypes.put(0L, theType);
+			DebugTool.logInfo(String.format("RegisteredApp: appId=%s, transportType=%s", appId, theType.toString()));
+			transportTypes.put(new Long(0L), theType);
 			setDeathNote();
 		}
 
@@ -2795,7 +2797,7 @@ public class SdlRouterService extends Service{
 		}
 
 		public TransportType getTransportType() {
-			return transportTypes.get(0);
+			return transportTypes.get(new Long(0L));
 		}
 
 		protected PacketWriteTask peekNextTask(){
