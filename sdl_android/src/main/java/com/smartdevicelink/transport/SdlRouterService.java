@@ -2407,20 +2407,24 @@ public class SdlRouterService extends Service{
 		final long currentTime = System.currentTimeMillis();
 		RegisteredApp priorityApp = null;
 		long currentPriority = -Long.MAX_VALUE, peekWeight;
-		synchronized(REGISTERED_APPS_LOCK){
-			PacketWriteTask peekTask;
-			for (RegisteredApp app : registeredApps.values()) {
-				peekTask = app.peekNextTask();
-				if(peekTask!=null){
-					peekWeight = peekTask.getWeight(currentTime);
-					//Log.v(TAG, "App " + app.appId +" has a task with weight "+ peekWeight);
-					if(peekWeight>currentPriority){
-						if(app.queuePaused){
-							app.notIt();//Reset the timer
-							continue;
-						}
-						if(priorityApp!=null){
-							priorityApp.notIt();
+		if (registeredApps != null) {
+			synchronized (REGISTERED_APPS_LOCK) {
+				PacketWriteTask peekTask = null;
+				for (RegisteredApp app : registeredApps.values()) {
+					peekTask = app.peekNextTask();
+					if (peekTask != null) {
+						peekWeight = peekTask.getWeight(currentTime);
+						//Log.v(TAG, "App " + app.appId +" has a task with weight "+ peekWeight);
+						if (peekWeight > currentPriority) {
+							if (app.queuePaused) {
+								app.notIt();//Reset the timer
+								continue;
+							}
+							if (priorityApp != null) {
+								priorityApp.notIt();
+							}
+							currentPriority = peekWeight;
+							priorityApp = app;
 						}
 					}
 				}
