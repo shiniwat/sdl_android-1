@@ -2934,7 +2934,7 @@ public class SdlRouterService extends Service{
 				//Log.d("PacketWriteTask", "writeBytesToTransport");
 				mWriterMap.get(transportType).writeBytesToTransport(receivedBundle);
 			}else if(bytesToWrite !=null){
-				//Log.d("PacketWriteTask", String.format("manuallyWriteBytes %d bytes", size));
+				Log.d("PacketWriteTask", String.format("manuallyWriteBytes %d bytes", size));
 				mWriterMap.get(transportType).manuallyWriteBytes(bytesToWrite, offset, size);
 			}
 		}
@@ -2966,6 +2966,7 @@ public class SdlRouterService extends Service{
 					synchronized(QUEUE_LOCK){
 						task = getNextTask();
 						if(task != null){
+							DebugTool.logInfo("about running task: " + task.toString());
 							task.run();
 						}else{
 							isWaiting = true;
@@ -2980,7 +2981,7 @@ public class SdlRouterService extends Service{
 		}
 
 		void alert(){
-			//Log.d(TAG, "alert isWaiting=" + isWaiting);
+			DebugTool.logInfo(String.format("alert isWaiting=%s", ((isWaiting) ? "true" : "false")));
 			if(isWaiting){
 				synchronized(QUEUE_LOCK){
 					QUEUE_LOCK.notify();
@@ -3068,6 +3069,7 @@ public class SdlRouterService extends Service{
 					throw new NullPointerException();
 				}
 
+				DebugTool.logInfo("add task: transport=" + task.transportType.toString());
 				//If we currently don't have anything in our queue
 				if(head == null || tail == null){
 					PacketWriteTaskBlockingQueue.Node<PacketWriteTask> taskNode = new PacketWriteTaskBlockingQueue.Node<PacketWriteTask>(task, head, tail);
