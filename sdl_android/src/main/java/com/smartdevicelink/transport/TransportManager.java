@@ -6,6 +6,8 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.Parcelable;
 import android.util.Log;
+import android.os.Looper;
+import android.os.ConditionVariable;
 
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
@@ -19,9 +21,11 @@ public class TransportManager {
 
     private final Object TRANSPORT_STATUS_LOCK;
 
+    TransportBrokerThread _brokerThread;
     TransportBrokerImpl transport;
     final HashMap<TransportType, Boolean> transportStatus;
     final TransportEventListener transportListener;
+    final WeakReference<Context> contextWeakReference;
 
     //Legacy Transport
     MultiplexBluetoothTransport legacyBluetoothTransport;
@@ -49,9 +53,15 @@ public class TransportManager {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
+        contextWeakReference = new WeakReference<>(config.context);
         RouterServiceValidator validator = new RouterServiceValidator(config.context,config.service);
         if(validator.validate()){
-            transport = new TransportBrokerImpl(config.context, config.appId,config.service);
+            //transport = new TransportBrokerImpl(config.context, config.appId,config.service);
+            ConditionVariable cond = new ConditionVariable();
+            _brokerThread = new TransportBrokerThread(config.context, config.appId, config.service, cond);
+            _brokerThread.start();
+            cond.block();
+            transport = _brokerThread.getBroker();
         }else{
             enterLegacyMode("Router service is not trusted. Entering legacy mode");
             //throw new SecurityException("Unable to trust router service");
@@ -84,7 +94,7 @@ public class TransportManager {
      * @return
      */
     public boolean isConnected(TransportType transportType){
-        if(transportType != null){
+        if(transportType != null && transportStatus != null){
             return transportStatus.get(transportType);
         }
         return transportStatus.values().contains(true);
@@ -137,7 +147,7 @@ public class TransportManager {
 
         @Override
         public boolean onHardwareConnected(TransportType[] types) {
-            Log.d(TAG, "onHardwareConnected");
+            Log.d(TAG, "onHardwareConnected: " + types.toString());
             super.onHardwareConnected(types);
             synchronized (TRANSPORT_STATUS_LOCK){
                 resetTransports();
@@ -177,6 +187,70 @@ public class TransportManager {
             if(packet!=null){
                 transportListener.onPacketReceived((SdlPacket)packet);
             }
+        }
+    }
+
+    private class TransportBrokerThread extends Thread {
+        private boolean _connected;
+        private TransportBrokerImpl _broker;
+        final Context _context;
+        final String _appId;
+        final ComponentName _service;
+        Looper _threadLooper;
+        ConditionVariable mCond;
+
+        public TransportBrokerThread(Context context, String appId, ComponentName service, ConditionVariable cond) {
+            super();
+            this._context = context;
+            this._appId = appId;
+            this._service = service;
+            mCond = cond;
+        }
+
+        public void startConnection() {
+            synchronized(this) {
+                _connected = false;
+                if (_broker != null) {
+                    try {
+                        _broker.start();
+                    } catch(Exception e) {
+                        Log.e(TAG, "Error starting Transport: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        public synchronized void cancel() {
+            if (_broker == null) {
+                _broker.stop();
+                _broker = null;
+            }
+            _connected = false;
+            if (_threadLooper != null) {
+                _threadLooper.quitSafely();
+                _threadLooper = null;
+            }
+        }
+
+        @Override
+        public void run() {
+            Looper.prepare();
+            if (_broker == null) {
+                synchronized(this) {
+                    _broker = new TransportBrokerImpl(_context, _appId, _service);
+                    this.notify();
+                }
+                _threadLooper = Looper.myLooper();
+                mCond.open();
+                Looper.loop();
+            } else {
+                mCond.open();
+            }
+
+        }
+
+        public final TransportBrokerImpl getBroker() {
+            return _broker;
         }
     }
 

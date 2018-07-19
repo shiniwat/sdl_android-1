@@ -16,7 +16,7 @@ import android.os.Messenger;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
-import android.util.Log;
+import com.smartdevicelink.localdebug.DebugConst;
 
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.protocol.enums.ControlFrameTags;
@@ -57,7 +57,26 @@ public class TransportBroker {
 	
 	private ServiceConnection routerConnection;
 	private int routerServiceVersion = 1;
-	
+
+	private static class Log {
+		public static void e(String tag, String msg) {
+			android.util.Log.e(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void w(String tag, String msg) {
+			android.util.Log.w(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void i(String tag, String msg) {
+			android.util.Log.i(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void d(String tag, String msg) {
+			android.util.Log.d(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+	}
+
 	private void initRouterConnection(){
 		routerConnection= new ServiceConnection() {
 

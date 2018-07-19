@@ -22,6 +22,7 @@ import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.BitConverter;
 import com.smartdevicelink.util.DebugTool;
 import com.smartdevicelink.util.Version;
+import com.smartdevicelink.localdebug.DebugConst;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.ref.WeakReference;
@@ -682,7 +683,7 @@ public class WiProProtocol extends AbstractProtocol {
 
 						//Check to make sure this is a transport we are willing to accept
 						TransportType transportType = packet.getTransportType();
-						if(transportType == null || !requestedPrimaryTransports.contains(transportType)){
+						if(transportType == null || requestedPrimaryTransports != null && !requestedPrimaryTransports.contains(transportType)){
 							onTransportNotAccepted("Transport is not in requested primary transports");
 							return;
 						}
@@ -721,19 +722,25 @@ public class WiProProtocol extends AbstractProtocol {
 
 						List<TransportType> supportedTransports = new ArrayList<>();
 
-						for (String s : secondary) {
-							Log.d(TAG, "Secondary transports allowed by core: " + s);
-							if(s.equals(TransportConstants.TCP_WIFI)){
-								supportedTransports.add(TransportType.TCP);
-							}else if(s.equals(TransportConstants.AOA_USB)){
-								supportedTransports.add(TransportType.USB);
-							}else if(s.equals(TransportConstants.SPP_BLUETOOTH)){
-								supportedTransports.add(TransportType.BLUETOOTH);
-							}
+						if (secondary != null) {
+						    for (String s : secondary) {
+							    Log.d(TAG, "Secondary transports allowed by core: " + s);
+							    if(s.equals(TransportConstants.TCP_WIFI)){
+								    supportedTransports.add(TransportType.TCP);
+							    }else if(s.equals(TransportConstants.AOA_USB)){
+								    supportedTransports.add(TransportType.USB);
+							    }else if(s.equals(TransportConstants.SPP_BLUETOOTH)){
+								    supportedTransports.add(TransportType.BLUETOOTH);
+							    }
+						    }
+						    setSupportedSecondaryTransports(supportedTransports);
 						}
-						setSupportedSecondaryTransports(supportedTransports);
-						setSupportedServices(SessionType.PCM, audio);
-						setSupportedServices(SessionType.NAV, video);
+						if (audio != null) {
+						    setSupportedServices(SessionType.PCM, audio);
+						}
+						if (video != null) {
+						    setSupportedServices(SessionType.NAV, video);
+						}
 
 						boolean activeTransportsHandled = false;
 
@@ -848,6 +855,20 @@ public class WiProProtocol extends AbstractProtocol {
 					rejectedParams = (List<String>) packet.getTag(rejectedTag);
 				}
 				if (serviceType.eq(SessionType.NAV) || serviceType.eq(SessionType.PCM)) {
+					// local logging...
+					String rejPrm = "";
+					if ( rejectedParams != null ) {
+						rejPrm = "cnt:" + rejectedParams.size() + " [";
+						for ( String s : rejectedParams ) {
+							rejPrm += s + ",";
+						}
+						rejPrm += "]";
+					} else {
+						rejPrm = null;
+					}
+					String mes = "WiProProtocol **NACK** /sessionId:" + (byte)packet.getSessionId() +
+							" /rejParam:" + rejPrm;
+					DebugConst.log("WiProProtocol", mes);
 					handleProtocolSessionNACKed(serviceType, (byte)packet.getSessionId(), getMajorVersionByte(), "", rejectedParams);
 				} else {
 					handleProtocolError("Got StartSessionNACK for protocol sessionID=" + packet.getSessionId(), null);
@@ -946,6 +967,7 @@ public class WiProProtocol extends AbstractProtocol {
 	@Deprecated
 	public void StartProtocolService(SessionType sessionType, byte sessionID, boolean isEncrypted) {
 		SdlPacket header = SdlPacketFactory.createStartSession(sessionType, 0x00, getMajorVersionByte(), sessionID, isEncrypted);
+		Log.d(TAG, String.format("StartProtocolService sessionType=%s, ID=%d", sessionType.getName(), sessionID));
 		if(sessionType.equals(SessionType.NAV)){
 			SdlSession videoSession =  null;
 			if(sessionWeakReference != null){

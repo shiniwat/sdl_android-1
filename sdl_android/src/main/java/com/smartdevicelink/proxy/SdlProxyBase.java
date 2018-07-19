@@ -87,6 +87,7 @@ import com.smartdevicelink.transport.SiphonServer;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.util.CorrelationIdGenerator;
 import com.smartdevicelink.util.DebugTool;
+import com.smartdevicelink.localdebug.DebugConst;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -237,6 +238,24 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 	protected VideoStreamingManager manager; //Will move to SdlSession once the class becomes public
 
+	private static class Log {
+		public static void e(String tag, String msg) {
+			android.util.Log.e(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void w(String tag, String msg) {
+			android.util.Log.w(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void i(String tag, String msg) {
+			android.util.Log.i(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void d(String tag, String msg) {
+			android.util.Log.d(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+	}
 
 	// Interface broker
 	private SdlInterfaceBroker _interfaceBroker = null;
@@ -422,7 +441,8 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			
 			setWiProVersion(version);	
 			
-			if (sessionType.eq(SessionType.RPC)) {	
+			DebugConst.log(TAG, "onProtocolSessionStarted sessionType=" + sessionType.getName());
+			if (sessionType.eq(SessionType.RPC)) {
 
 				if (!isEncrypted)
 				{
@@ -460,6 +480,18 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		@Override
 		public void onProtocolSessionStartedNACKed(SessionType sessionType,
 				byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
+			{       // CUSTOM logging
+				String rparams = null;
+				if (rejectedParams != null) {
+					rparams = "[";
+					for (String s : rejectedParams) {
+						rparams += s + ",";
+					}
+					rparams += "]";
+				}
+				DebugConst.log(TAG, "onProtocolSessionStartedNACKed() /stype:" + sessionType.getName() + " /sessionID:" + sessionID +
+						" /version:" + version + " /corId:" + correlationID + " /rparams:" + rparams);
+			}
 			OnServiceNACKed message = new OnServiceNACKed(sessionType);
 			queueInternalMessage(message);
 			
@@ -720,6 +752,19 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_incomingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("INCOMING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// CUSTOMIZED logging
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:incomingMessage";
+									mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+									DebugConst.log(TAG, mes);
+
+								} catch (Exception e) {
+									DebugConst.log(TAG, "incomingMessage failed. /e:" + e.getMessage());
+									e.printStackTrace();
+								}
+							}
 							dispatchIncomingMessage(message);
 						}
 	
@@ -746,6 +791,19 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_outgoingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("OUTGOING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// CUSTOMIZED logging
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:outgoingMessage";
+									mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+									DebugConst.log(TAG, mes);
+
+								} catch (Exception e) {
+									DebugConst.log(TAG, "outgoingMessage failed. /e:" + e.getMessage());
+									e.printStackTrace();
+								}
+							}
 							dispatchOutgoingMessage(message);
 						}
 	
@@ -6485,7 +6543,15 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						ImageResolution resolution = null;
 						if(getWiProVersion()>=5){ //At this point we should already have the capability
 							VideoStreamingCapability capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);
-							resolution = capability.getPreferredResolution();
+							if (capability != null) {
+								resolution = capability.getPreferredResolution();
+							} else {
+								// fallback?
+								DisplayCapabilities dispCap = (DisplayCapabilities) _systemCapabilityManager.getCapability(SystemCapabilityType.DISPLAY);
+								if (dispCap != null) {
+									resolution = (dispCap.getScreenParams().getImageResolution());
+								}
+							}
 						}else {
 							DisplayCapabilities dispCap = (DisplayCapabilities) _systemCapabilityManager.getCapability(SystemCapabilityType.DISPLAY);
 							if (dispCap != null) {
