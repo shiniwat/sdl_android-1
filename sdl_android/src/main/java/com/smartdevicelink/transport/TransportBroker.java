@@ -431,6 +431,7 @@ public class TransportBroker {
 
 		@Deprecated
 		public boolean onHardwareConnected(TransportType type){
+		    Log.d(TAG, "onHardwareConnected: " + type);
 			synchronized(INIT_LOCK){
 				if(routerServiceMessenger==null){
 					queuedOnTransportConnect = type;
@@ -441,6 +442,7 @@ public class TransportBroker {
 		}
 
 		public boolean onHardwareConnected(TransportType[] transportTypes){
+		    Log.d(TAG, "onHardwareConnected: " + transportTypes);
 			synchronized(INIT_LOCK){
 				if(routerServiceMessenger==null){
 					queuedOnTransportConnect = transportTypes[0];
@@ -621,7 +623,7 @@ public class TransportBroker {
 		 * the appropriate context that the rest of this class is using.
 		 * @return The currently used context for this class
 		 */
-		private Context getContext(){
+		public Context getContext(){
 			return currentContext;
 		}
 		

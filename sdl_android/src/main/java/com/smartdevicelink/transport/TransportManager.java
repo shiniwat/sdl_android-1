@@ -8,9 +8,11 @@ import android.os.Parcelable;
 import android.util.Log;
 import android.os.Looper;
 import android.os.ConditionVariable;
+import android.content.Intent;
 
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
+import com.smartdevicelink.util.AndroidTools;
 
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
@@ -149,14 +151,22 @@ public class TransportManager {
         public boolean onHardwareConnected(TransportType[] types) {
             Log.d(TAG, "onHardwareConnected: " + types.toString());
             super.onHardwareConnected(types);
+            boolean containsUSB = false;
             synchronized (TRANSPORT_STATUS_LOCK){
                 resetTransports();
                 for(int i = 0; i< types.length; i++){
                     TransportManager.this.transportStatus.put(types[i],true);
                     Log.d(TAG, "Transport connected: " + types[i].name());
+                    if (types[i] == TransportType.USB) {
+                        containsUSB = true;
+                    }
                 }
             }
-            transportListener.onTransportConnected(types);
+            if (containsUSB) {
+		        Intent usbAccessoryIntent = new Intent(USBTransport.ACTION_USB_ACCESSORY_ATTACHED);
+        		usbAccessoryIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
+    		    AndroidTools.sendExplicitBroadcast(super.getContext(), usbAccessoryIntent, null);
+            }
             return true;
         }
 

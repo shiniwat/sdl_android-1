@@ -33,6 +33,8 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
+
+
 public class WiProProtocol extends AbstractProtocol {
 	private static final String TAG ="SdlProtocol";
 	private final static String FailurePropagating_Msg = "Failure propagating ";
@@ -228,23 +230,32 @@ public class WiProProtocol extends AbstractProtocol {
 			startService(SessionType.RPC,(byte)0x00,false);
 			return;
 		}else if(requiresHighBandwidth){
-			for(TransportType transportType : transportTypes){
-				if(supportedSecondaryTransports.contains(transportType)){
-					SdlSession session = null;
-					if(sessionWeakReference != null){
-						session = sessionWeakReference.get();
-					}
-					if(session != null) {
-						Log.d(TAG, "Registering secondary transport!");
-						registerSecondaryTransport(session.getSessionId(), transportType);
-					}else{
-						Log.d(TAG, "Session was null");
-					}
-					return; // For now, only support registering one secondary transport
-				}else{
-					Log.d(TAG, transportType.toString() + " not supported as secondary transport");
-				}
-			}
+		    if (protocolVersion.isNewerThan(new Version("5.1.0")) > 1) {
+                for(TransportType transportType : transportTypes){
+                    if(supportedSecondaryTransports.contains(transportType)){
+                        SdlSession session = null;
+                        if(sessionWeakReference != null){
+                            session = sessionWeakReference.get();
+                        }
+                        if(session != null) {
+                            Log.d(TAG, "Registering secondary transport!");
+                            registerSecondaryTransport(session.getSessionId(), transportType);
+                        }else{
+                            Log.d(TAG, "Session was null");
+                        }
+                        return; // For now, only support registering one secondary transport
+                    }else{
+                        Log.d(TAG, transportType.toString() + " not supported as secondary transport");
+                    }
+                }
+			} else {
+		        //if (Arrays.asList(transportTypes).contains(TransportType.USB)) {
+		            Log.d(TAG, "@TODO: Need to restart proxy here");
+		        //    Intent usbAccessoryIntent = new Intent(USBTransport.ACTION_USB_ACCESSORY_ATTACHED);
+        		//    usbAccessoryIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
+    		    //    AndroidTools.sendExplicitBroadcast(getApplicationContext(), usbAccessoryIntent, null);
+                //}
+            }
 		}
 	}
 
@@ -999,7 +1010,7 @@ public class WiProProtocol extends AbstractProtocol {
 	}
 
 	public void startService(SessionType serviceType, byte sessionID, boolean isEncrypted) {
-		Log.d(TAG, "startService");
+		Log.d(TAG, "startService for:" + serviceType);
 		final SdlPacket header = SdlPacketFactory.createStartSession(serviceType, 0x00, getMajorVersionByte(), sessionID, isEncrypted);
 		if(SessionType.RPC.equals(serviceType)){
 			if(connectedPrimaryTransport != null) {

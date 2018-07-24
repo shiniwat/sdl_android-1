@@ -566,7 +566,7 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
 							&& transportManager != null
 							&& transportManager.isConnected(transportType)){
 						Log.d(TAG, "Found a suitable transport");
-						primaryTransportAvailable = true;
+						primaryTransportAvailable = wiProProtocol.getProtocolVersion().isNewerThan(new com.smartdevicelink.util.Version("5.1.0")) >= 1;
 						((MultiplexTransportConfig) this.transportConfig).setService(transportManager.getRouterService());
 						break;
 					}
