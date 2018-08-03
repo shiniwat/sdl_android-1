@@ -162,6 +162,7 @@ public class TransportManager {
                     }
                 }
             }
+            transportListener.onTransportConnected(types);
             if (containsUSB) {
 		        Intent usbAccessoryIntent = new Intent(USBTransport.ACTION_USB_ACCESSORY_ATTACHED);
         		usbAccessoryIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
