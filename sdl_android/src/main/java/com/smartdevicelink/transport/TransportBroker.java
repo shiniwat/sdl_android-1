@@ -690,10 +690,10 @@ public class TransportBroker {
 		 */
 		@Deprecated
 		public void requestNewSession() {
-			requestNewSession(null, false);
+			requestNewSession(null);
 		}
 
-		public void requestNewSession(TransportType transportType, boolean requiresHighBandwidth){
+		public void requestNewSession(TransportType transportType){
 			Log.d(TAG, "requestNewSession: " + transportType.name());
 			Message msg = Message.obtain();
 			msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
@@ -705,9 +705,6 @@ public class TransportBroker {
 			bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
 			if(transportType != null) {
 				bundle.putString(TransportConstants.ROUTER_REQUEST_NEW_SESSION_TRANSPORT_TYPE, transportType.name());
-			}
-			if (requiresHighBandwidth) {
-				bundle.putBoolean(TransportConstants.REQUIRES_HIGH_BANDWIDTH, requiresHighBandwidth);
 			}
 			msg.setData(bundle);
 			this.sendMessageToRouterService(msg);

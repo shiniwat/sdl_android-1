@@ -40,7 +40,6 @@ public class TransportManager {
     MultiplexBluetoothTransport legacyBluetoothTransport;
     LegacyBluetoothHandler legacyBluetoothHandler;
 
-    private final boolean requiresHighBandwidth;
 
 
     /**
@@ -65,7 +64,6 @@ public class TransportManager {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
-        requiresHighBandwidth = config.requiresHighBandwidth;
         contextWeakReference = new WeakReference<>(config.context);
         RouterServiceValidator validator = new RouterServiceValidator(config.context,config.service);
         if(validator.validate()){
@@ -157,7 +155,7 @@ public class TransportManager {
 
     public void requestNewSession(TransportType transportType){
         if(transport!=null){
-            transport.requestNewSession(transportType, requiresHighBandwidth);
+            transport.requestNewSession(transportType);
         }else if(legacyBluetoothTransport != null && !TransportType.BLUETOOTH.equals(transportType)){
             Log.w(TAG, "Session requested for non-bluetooth transport while in legacy mode");
         }

@@ -63,7 +63,6 @@ public class TransportConstants {
 	public static final String SDL_NOTIFICATION_CHANNEL_ID 						= "sdl_notification_channel";
 	public static final String SDL_NOTIFICATION_CHANNEL_NAME 					= "SmartDeviceLink";
 
-    public static final String REQUIRES_HIGH_BANDWIDTH                          = "sdl.router.requires_high_bandwidth";
 
 
 	/**
