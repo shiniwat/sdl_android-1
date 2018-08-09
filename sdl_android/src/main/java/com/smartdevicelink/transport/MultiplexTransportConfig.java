@@ -49,7 +49,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 		this.appId = appId;
 		this.securityLevel = FLAG_MULTI_SECURITY_MED;
 		this.primaryTransports = Arrays.asList(new TransportType[]{TransportType.USB, TransportType.BLUETOOTH});
-		//this.secondaryTransports = Arrays.asList(new TransportType[]{TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH});
+		this.secondaryTransports = Arrays.asList(new TransportType[]{TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH});
 
 	}
 
@@ -58,7 +58,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 		this.appId = appId;
 		this.securityLevel = securityLevel;
 		this.primaryTransports = Arrays.asList(new TransportType[]{TransportType.USB, TransportType.BLUETOOTH});
-		//this.secondaryTransports = Arrays.asList(new TransportType[]{TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH});
+		this.secondaryTransports = Arrays.asList(new TransportType[]{TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH});
 
 
 	}	

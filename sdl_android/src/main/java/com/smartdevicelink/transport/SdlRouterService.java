@@ -38,7 +38,6 @@ import static com.smartdevicelink.transport.TransportConstants.HARDWARE_DISCONNE
 import static com.smartdevicelink.transport.TransportConstants.SEND_PACKET_TO_APP_LOCATION_EXTRA_NAME;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -110,6 +109,7 @@ import com.smartdevicelink.proxy.rpc.UnregisterAppInterface;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
 import com.smartdevicelink.transport.utl.ByteArrayMessageSpliter;
+import com.smartdevicelink.transport.utl.TransportRecord;
 import com.smartdevicelink.util.AndroidTools;
 import com.smartdevicelink.util.BitConverter;
 import com.smartdevicelink.util.SdlAppInfo;
@@ -117,6 +117,7 @@ import com.smartdevicelink.util.SdlAppInfo;
 import static com.smartdevicelink.transport.TransportConstants.FOREGROUND_EXTRA;
 import static com.smartdevicelink.transport.TransportConstants.SDL_NOTIFICATION_CHANNEL_ID;
 import static com.smartdevicelink.transport.TransportConstants.SDL_NOTIFICATION_CHANNEL_NAME;
+import static com.smartdevicelink.transport.TransportConstants.TRANSPORT_DISCONNECTED;
 
 /**
  * <b>This class should not be modified by anyone outside of the approved contributors of the SmartDeviceLink project.</b>
@@ -174,7 +175,6 @@ public class SdlRouterService extends Service{
 	private static boolean connectAsClient = false;
 	private static boolean closing = false;
 	private boolean isTransportConnected = false;
-	private TransportType connectedTransportType = TransportType.MULTIPLEX;
 
     private Handler  altTransportTimerHandler, foregroundTimeoutHandler;
     private Runnable  altTransportTimerRunnable, foregroundTimeoutRunnable;
@@ -195,7 +195,6 @@ public class SdlRouterService extends Service{
 	private boolean startSequenceComplete = false;	
 	
 	private ExecutorService packetExecutor = null;
-	//PacketWriteTaskMaster packetWriteTaskMaster = null;
 	HashMap<TransportType, PacketWriteTaskMaster>  packetWriteTaskMasterMap = null;
 
 
@@ -282,23 +281,20 @@ public class SdlRouterService extends Service{
 						Log.d(TAG, "Disconnect received. Action: " + intent.getAction());
 
 						if(action.equalsIgnoreCase(BluetoothAdapter.ACTION_STATE_CHANGED)){
-							BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-							if(adapter != null) {
-								int bluetoothState = adapter.getState();
-								switch (bluetoothState) {
-									case BluetoothAdapter.STATE_TURNING_ON:
-									case BluetoothAdapter.STATE_ON:
-										//There is nothing to do in the case the adapter is turning on or just switched to on
-										return;
-									case BluetoothAdapter.STATE_TURNING_OFF:
-									case BluetoothAdapter.STATE_OFF:
-										Log.d(TAG, "Bluetooth is shutting off, SDL Router Service is closing.");
-										connectAsClient = false;
-										shouldServiceRemainOpen(intent);
-										return;
-									default:
-										break;
-								}
+							int bluetoothState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
+							switch (bluetoothState) {
+								case BluetoothAdapter.STATE_TURNING_ON:
+								case BluetoothAdapter.STATE_ON:
+									//There is nothing to do in the case the adapter is turning on or just switched to on
+									return;
+								case BluetoothAdapter.STATE_TURNING_OFF:
+								case BluetoothAdapter.STATE_OFF:
+									Log.d(TAG, "Bluetooth is shutting off, SDL Router Service is closing.");
+									connectAsClient = false;
+									shouldServiceRemainOpen(intent);
+									return;
+								default:
+									break;
 							}
 						}
 						//Otherwise
@@ -306,7 +302,7 @@ public class SdlRouterService extends Service{
 						if (legacyModeEnabled) {
 							Log.d(TAG, "Legacy mode enabled and bluetooth d/c'ed, restarting router service bluetooth.");
 							enableLegacyMode(false);
-							onTransportDisconnected(TransportType.BLUETOOTH);
+							onTransportDisconnected(new TransportRecord(TransportType.BLUETOOTH,null));
 							initBluetoothSerialService();
 						}
 					}
@@ -408,8 +404,9 @@ public class SdlRouterService extends Service{
 	            		returnBundle = new Bundle();
 	            		//Add params if connected
 	            		if(service.isTransportConnected){
-	            			returnBundle.putString(TransportConstants.HARDWARE_CONNECTED, service.connectedTransportType.name());
-							returnBundle.putStringArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED,service.getConnectedTransports());
+                            ArrayList<TransportRecord> records = service.getConnectedTransports();
+	            			returnBundle.putString(TransportConstants.HARDWARE_CONNECTED, records.get(records.size()-1).getType().name());
+							returnBundle.putParcelableArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED,records);
 
 	                		if(MultiplexBluetoothTransport.currentlyConnectedDevice!=null){
 	                			returnBundle.putString(CONNECTED_DEVICE_STRING_EXTRA_NAME, MultiplexBluetoothTransport.currentlyConnectedDevice);
@@ -467,7 +464,7 @@ public class SdlRouterService extends Service{
 									if(buffAppId == null){
                                         buffAppId = "" + receivedBundle.getLong(TransportConstants.APP_ID_EXTRA, -1);
                                     }
-                                    TransportType transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT_FOR_PACKET));
+                                    TransportType transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT));
 									if(transportType == null){
 										/* We check bluetooth first because we assume if this value
 										 * isn't included it is an older version of the proxy and
@@ -481,7 +478,7 @@ public class SdlRouterService extends Service{
 											transportType = TransportType.TCP;
 										}
 										//Log.d(TAG, "Transport type was null, so router set it to " + transportType.name());
-										receivedBundle.putString(TransportConstants.TRANSPORT_FOR_PACKET, transportType.name());
+										receivedBundle.putString(TransportConstants.TRANSPORT, transportType.name());
 									}else{
 										//Log.d(TAG, "Transport type of packet to send: " + transportType.name());
 									}
@@ -602,7 +599,7 @@ public class SdlRouterService extends Service{
 	                		Log.e(TAG, "No reply address included, can't send a reply");
 	                	}
 	                	break;
-	                case TransportConstants.ROUTER_SEND_SECONDARY_TRANSPORT_DETAILS:
+	                case TransportConstants.ROUTER_REQUEST_SECONDARY_TRANSPORT_CONNECTION:
 	                	// Currently this only handles one TCP connection
 		                String ipAddr = receivedBundle.getString(ControlFrameTags.RPC.TransportEventUpdate.TCP_IP_ADDRESS);
 		                int port = receivedBundle.getInt(ControlFrameTags.RPC.TransportEventUpdate.TCP_PORT);
@@ -658,7 +655,7 @@ public class SdlRouterService extends Service{
         						&& altTransportService.equals(msg.replyTo)){
         					//The same transport that was connected to the router service is now telling us it's disconnected. Let's inform clients and clear our saved messenger
         					altTransportService = null;
-        					service.onTransportDisconnected(TransportType.valueOf(receivedBundle.getString(TransportConstants.HARDWARE_DISCONNECTED)));
+        					service.onTransportDisconnected(new TransportRecord(TransportType.valueOf(receivedBundle.getString(TransportConstants.HARDWARE_DISCONNECTED)),null));
         					service.shouldServiceRemainOpen(null); //this will close the service if bluetooth is not available
         				}
         			}else if(receivedBundle.containsKey(TransportConstants.HARDWARE_CONNECTED)){
@@ -679,7 +676,7 @@ public class SdlRouterService extends Service{
         					
         					//Let the alt transport know they are good to go
         					retMsg.arg1 = TransportConstants.ROUTER_REGISTER_ALT_TRANSPORT_RESPONSE_SUCESS;
-        					service.onTransportConnected(TransportType.valueOf(receivedBundle.getString(TransportConstants.HARDWARE_CONNECTED)));
+        					service.onTransportConnected(new TransportRecord(TransportType.valueOf(receivedBundle.getString(TransportConstants.HARDWARE_CONNECTED)),null));
 
         				}else{ //There seems to be some other transport connected
         					//Error
@@ -792,7 +789,7 @@ public class SdlRouterService extends Service{
 						ParcelFileDescriptor parcelFileDescriptor = (ParcelFileDescriptor)msg.obj;
 						if(parcelFileDescriptor != null){
 							//New USB constructor with PFD
-							service.usbTransport = new MultiplexUsbTransport(parcelFileDescriptor,service.usbHandler);
+							service.usbTransport = new MultiplexUsbTransport(parcelFileDescriptor,service.usbHandler,msg.getData());
 							service.usbTransport.start();
 
 						}
@@ -1031,10 +1028,10 @@ public class SdlRouterService extends Service{
 	}
 	
 	public void startUpSequence(){
-		IntentFilter disconnectFilter = new IntentFilter("android.bluetooth.adapter.action.STATE_CHANGED");
-		disconnectFilter.addAction("android.bluetooth.device.action.CLASS_CHANGED");
-		disconnectFilter.addAction("android.bluetooth.device.action.ACL_DISCONNECTED");
-		disconnectFilter.addAction("android.bluetooth.device.action.ACL_DISCONNECT_REQUESTED");
+		IntentFilter disconnectFilter = new IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED);
+		disconnectFilter.addAction(BluetoothDevice.ACTION_CLASS_CHANGED);
+		disconnectFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+		disconnectFilter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED);
 		registerReceiver(mListenForDisconnect,disconnectFilter );
 		
 		IntentFilter filter = new IntentFilter();
@@ -1311,15 +1308,24 @@ public class SdlRouterService extends Service{
 		return connectedDeviceName;
 	}
 
-	private ArrayList<String> getConnectedTransports(){
-		ArrayList<String> connected = new ArrayList<>();
-		for(TransportType transport : TransportType.values()){
-			if(isTransportConnected(transport)){
-				connected.add(transport.name());
-			}
-		}
+	private ArrayList<TransportRecord> getConnectedTransports(){
+		ArrayList<TransportRecord> connected = new ArrayList<>();
+        if(bluetoothTransport != null && bluetoothTransport.isConnected()){
+            connected.add(bluetoothTransport.getTransportRecord());
+        }
+
+        if(tcpTransport != null && tcpTransport.isConnected()){
+            connected.add(tcpTransport.getTransportRecord());
+        }
+
+        if(usbTransport != null && usbTransport.isConnected()){
+            connected.add(usbTransport.getTransportRecord());
+        }
+
+        Log.d(TAG, "Returning connected transport size: " + connected.size());
 		return connected;
 	}
+
 
 	private boolean isTransportConnected(TransportType transportType){
 		if(bluetoothTransport != null && transportType.equals(TransportType.BLUETOOTH)){
@@ -1410,7 +1416,10 @@ public class SdlRouterService extends Service{
 		}
 	}
 	
-	public void onTransportConnected(final TransportType type){
+	//public void onTransportConnected(final TransportType type){
+//TODO
+   // }
+	public void onTransportConnected(final TransportRecord record){
 		isTransportConnected = true;
 		cancelForegroundTimeOut();
 		enterForeground("Connected to " + this.getConnectedDeviceName(),0);
@@ -1419,6 +1428,7 @@ public class SdlRouterService extends Service{
 			packetWriteTaskMasterMap = new HashMap<>();
 		}
 
+		TransportType type = record.getType();
 		PacketWriteTaskMaster packetWriteTaskMaster = packetWriteTaskMasterMap.get(type);
 		if(packetWriteTaskMaster!=null){
 			packetWriteTaskMaster.close();
@@ -1427,9 +1437,7 @@ public class SdlRouterService extends Service{
 		packetWriteTaskMaster.setTransportType(type);
 		packetWriteTaskMaster.start();
 		packetWriteTaskMasterMap.put(type,packetWriteTaskMaster);
-		
-		connectedTransportType = type;
-		
+
 		Intent startService = new Intent();  
 		startService.setAction(TransportConstants.START_ROUTER_SERVICE_ACTION);
 
@@ -1446,41 +1454,50 @@ public class SdlRouterService extends Service{
 		//HARDWARE_CONNECTED
     	if(!(registeredApps== null || registeredApps.isEmpty())){
     		//If we have clients
-			notifyClients(createHardwareConnectedMessage(type));
+			notifyClients(createHardwareConnectedMessage(record));
     	}
 	}
 	
-	private Message createHardwareConnectedMessage(final TransportType type){
+	private Message createHardwareConnectedMessage(final TransportRecord record){
 			Message message = Message.obtain();
 			message.what = TransportConstants.HARDWARE_CONNECTION_EVENT;
 			Bundle bundle = new Bundle();
-			bundle.putString(TransportConstants.HARDWARE_CONNECTED, type.name());
+			bundle.putString(TransportConstants.HARDWARE_CONNECTED, record.getType().name());
 			ArrayList transports = getConnectedTransports();
-			transports.add(0, type.name());
-			bundle.putStringArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED, transports);
-    		if(MultiplexBluetoothTransport.currentlyConnectedDevice!=null){
+			//transports.add(0, type.name());
+			bundle.putParcelableArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED, transports);
+
+			if(MultiplexBluetoothTransport.currentlyConnectedDevice!=null){
     			bundle.putString(CONNECTED_DEVICE_STRING_EXTRA_NAME, MultiplexBluetoothTransport.currentlyConnectedDevice);
     		}
+
 			message.setData(bundle);
 			return message;
 		
 	}
 	
-	public void onTransportDisconnected(TransportType type){
+	//public void onTransportDisconnected(TransportType type) {
+//TODO
+    //}
+	public void onTransportDisconnected(TransportRecord record){
 		cachedModuleVersion = -1; //Reset our cached version
 		if(registeredApps != null && !registeredApps.isEmpty()){
 			Message message = Message.obtain();
 			message.what = TransportConstants.HARDWARE_CONNECTION_EVENT;
 			Bundle bundle = new Bundle();
-			bundle.putString(HARDWARE_DISCONNECTED, type.name());
+            bundle.putParcelable(TRANSPORT_DISCONNECTED, record);
+            //For legacy
+            bundle.putString(HARDWARE_DISCONNECTED, record.getType().name());
 			bundle.putBoolean(TransportConstants.ENABLE_LEGACY_MODE_EXTRA, legacyModeEnabled);
-			bundle.putStringArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED,getConnectedTransports());
-			//TODO put other transports still connected
+
+			//Still connected transports
+			bundle.putParcelableArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED,getConnectedTransports());
+
 			message.setData(bundle);
 			notifyClients(message);
 		}
 		if(!getConnectedTransports().isEmpty()){
-			ArrayList<String> transports = getConnectedTransports();
+			ArrayList<TransportRecord> transports = getConnectedTransports();
 			// Updates notification to one of still connected transport
 			enterForeground("Connected to " + transports.get(transports.size() - 1),0);
 			return;
@@ -1489,7 +1506,7 @@ public class SdlRouterService extends Service{
 		if(altTransportService!=null){  //If we still have an alt transport open, then we don't need to tell the clients to close
 			return;
 		}
-		switch (type){
+		switch (record.getType()){
             case BLUETOOTH:
                 if(!connectAsClient ){
                     if(!legacyModeEnabled && !closing){
@@ -1506,13 +1523,12 @@ public class SdlRouterService extends Service{
 
 		//TODO fix this part. We need to make sure there are no curerntly connected transports
 
-		connectedTransportType = null;
 		isTransportConnected = false;
 		stopClientPings();
 
 		exitForeground();//Leave our foreground state as we don't have a connection anymore
 
-		PacketWriteTaskMaster packetWriteTaskMaster = packetWriteTaskMasterMap.remove(type);
+		PacketWriteTaskMaster packetWriteTaskMaster = packetWriteTaskMasterMap.remove(record.getType());
 		if(packetWriteTaskMaster!=null){
 			packetWriteTaskMaster.close();
 		}
@@ -1531,8 +1547,11 @@ public class SdlRouterService extends Service{
 		}
 	}
 
-	public void onTransportError(TransportType transportType){
-        switch (transportType){
+	//public void onTransportError(TransportType transportType){
+	    //TODO
+    //}
+	public void onTransportError(TransportRecord transport){
+        switch (transport.getType()){
             case BLUETOOTH:
                 if(bluetoothTransport !=null){
                     bluetoothTransport.setStateManually(MultiplexBluetoothTransport.STATE_NONE);
@@ -1544,6 +1563,7 @@ public class SdlRouterService extends Service{
             case TCP:
                 break;
         }
+
     }
 
 	public void onPacketRead(SdlPacket packet){
@@ -1588,10 +1608,10 @@ public class SdlRouterService extends Service{
 						service.connectedDeviceName = msg.getData().getString(MultiplexBaseTransport.DEVICE_NAME);
 	            		break;
 	            	case MESSAGE_STATE_CHANGE:
-	            	    TransportType transportType = (TransportType) msg.obj;
+	            	    TransportRecord transportRecord = (TransportRecord) msg.obj;
 	            		switch (msg.arg1) {
 	            		case MultiplexBaseTransport.STATE_CONNECTED:
-							service.onTransportConnected(transportType);
+							service.onTransportConnected(transportRecord);
 	            			break;
 	            		case MultiplexBaseTransport.STATE_CONNECTING:
 	            			// Currently attempting to connect - update UI?
@@ -1600,11 +1620,11 @@ public class SdlRouterService extends Service{
 	            			break;
 	            		case MultiplexBaseTransport.STATE_NONE:
 	            			// We've just lost the connection
-                            service.onTransportDisconnected(transportType);
+                            service.onTransportDisconnected(transportRecord);
 	            			break;
 	            		case MultiplexBaseTransport.STATE_ERROR:
                             Log.d(TAG, "Bluetooth serial server error received, setting state to none, and clearing local copy");
-                            service.onTransportError(transportType);
+                            service.onTransportError(transportRecord);
 	            			break;
 	            		}
 	                break;
@@ -1628,7 +1648,7 @@ public class SdlRouterService extends Service{
 			}
 			int offset = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_OFFSET, 0); //If nothing, start at the beginning of the array
 			int count = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_COUNT, packet.length);  //In case there isn't anything just send the whole packet.
-			TransportType transportType = TransportType.valueForString(bundle.getString(TransportConstants.TRANSPORT_FOR_PACKET));
+			TransportType transportType = TransportType.valueForString(bundle.getString(TransportConstants.TRANSPORT));
 			switch ((transportType)){
 				case BLUETOOTH:
 					if(bluetoothTransport !=null && bluetoothTransport.getState() == MultiplexBluetoothTransport.STATE_CONNECTED) {
@@ -1654,15 +1674,28 @@ public class SdlRouterService extends Service{
 			return false;
 		}
 		
-		private boolean manuallyWriteBytes(byte[] bytes, int offset, int count){
-			if(bluetoothTransport !=null && bluetoothTransport.getState()==MultiplexBluetoothTransport.STATE_CONNECTED){
-				if(bytes!=null){
-					bluetoothTransport.write(bytes,offset,count);
-					return true;
-				}
-				return false;
-			}else {
-				return sendThroughAltTransport(bytes,offset,count);
+		private boolean manuallyWriteBytes(TransportType transportType, byte[] packet, int offset, int count){
+			switch ((transportType)){
+				case BLUETOOTH:
+					if(bluetoothTransport !=null && bluetoothTransport.getState() == MultiplexBluetoothTransport.STATE_CONNECTED) {
+						bluetoothTransport.write(packet, offset, count);
+						return true;
+					}
+				case USB:
+					if(usbTransport != null && usbTransport.getState() ==  MultiplexBaseTransport.STATE_CONNECTED) {
+						usbTransport.write(packet, offset, count);
+						return true;
+					}
+				case TCP:
+					if(tcpTransport != null && tcpTransport.getState() ==  MultiplexBaseTransport.STATE_CONNECTED) {
+						tcpTransport.write(packet, offset, count);
+						return true;
+					}
+				default:
+					if(sendThroughAltTransport(packet, offset, count)){
+						return true;
+					}
+					return false;
 			}
 		}
 		
@@ -1724,44 +1757,64 @@ public class SdlRouterService extends Service{
 		 * @return whether or not the sending was successful 
 		 */
 		public boolean sendPacketToRegisteredApp(SdlPacket packet) {
-			if(registeredApps!=null && (registeredApps.size()>0)){
-				int session = packet.getSessionId();
+			if(registeredApps != null && registeredApps.size() > 0 ){
+				final int session = packet.getSessionId();
 				boolean isNewSessionRequest = false, isNewTransportRequest = false;
 
+				final int frameInfo = packet.getFrameInfo();
 				if(packet.getFrameType() == FrameType.Control){
-					isNewSessionRequest = (packet.getFrameInfo() == SdlPacket.FRAME_INFO_START_SERVICE_ACK || packet.getFrameInfo() == SdlPacket.FRAME_INFO_START_SERVICE_NAK)
+					isNewSessionRequest = (frameInfo == SdlPacket.FRAME_INFO_START_SERVICE_ACK ||frameInfo == SdlPacket.FRAME_INFO_START_SERVICE_NAK)
 							&& packet.getServiceType() == SdlPacket.SERVICE_TYPE_RPC;
-					isNewTransportRequest = (packet.getFrameInfo() == SdlPacket.FRAME_INFO_REGISTER_SECONDARY_TRANSPORT_ACK
-							|| packet.getFrameInfo() == SdlPacket.FRAME_INFO_REGISTER_SECONDARY_TRANSPORT_NAK); // && packet.getServiceType() != SdlPacket.SERVICE_TYPE_RPC;
+					isNewTransportRequest = (frameInfo == SdlPacket.FRAME_INFO_REGISTER_SECONDARY_TRANSPORT_ACK
+							|| frameInfo == SdlPacket.FRAME_INFO_REGISTER_SECONDARY_TRANSPORT_NAK); // && packet.getServiceType() != SdlPacket.SERVICE_TYPE_RPC;
 					if(isNewTransportRequest){
 						Log.d(TAG, "New transport request!");
 					}
 				}
 
-	    		String appid = getAppIDForSession(session, isNewSessionRequest, isNewTransportRequest, packet.getTransportType()); //Find where this packet should go
+				//Find where this packet should go
+	    		String appid = getAppIDForSession(session, isNewSessionRequest, isNewTransportRequest, packet.getTransportType());
 
-				if(appid!=null && appid.length()>0){
+				if(appid != null && appid.length() > 0){
+
 	    			RegisteredApp app;
 	    			synchronized(REGISTERED_APPS_LOCK){
 	    				 app = registeredApps.get(appid);
 	    			}
-	    			if(app==null){
+
+	    			if(app == null){
 	    				Log.e(TAG, "No app found for app id " + appid + " Removing session mapping and sending unregisterAI to head unit.");
+
 	    				//We have no app to match the app id tied to this session
 	    				removeSessionFromMap(session, Arrays.asList(packet.getTransportType()));
-	    				byte[] uai = createForceUnregisterApp((byte)session, (byte)packet.getVersion());
-	    				manuallyWriteBytes(uai,0,uai.length);
-	    				int hashId = 0;
-	    				synchronized(this.SESSION_LOCK){
-	    					if(this.sessionHashIdMap.indexOfKey(session)>=0){
-	    						hashId = this.sessionHashIdMap.get(session); 
-	    						this.sessionHashIdMap.delete(session);
-	    					}
-	    				}
-	    				byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)packet.getVersion(),BitConverter.intToByteArray(hashId))).constructPacket();
-						manuallyWriteBytes(stopService,0,stopService.length);
-	    				return false;
+
+						final int serviceType = packet.getServiceType();
+	    				if(serviceType == SdlPacket.SERVICE_TYPE_RPC || serviceType == SdlPacket.SERVICE_TYPE_BULK_DATA) {
+	    					//This is a primary transport packet as it is an RPC packet
+							//Create an unregister app interface to remove the app as it doesn't appear to exist anymore
+							byte[] uai = createForceUnregisterApp((byte) session, (byte) packet.getVersion());
+							manuallyWriteBytes(packet.getTransportType(),uai, 0, uai.length);
+
+							int hashId = 0;
+							synchronized(this.SESSION_LOCK){
+								if(this.sessionHashIdMap.indexOfKey(session)>=0){
+									hashId = this.sessionHashIdMap.get(session);
+									this.sessionHashIdMap.delete(session);
+								}
+							}
+
+							//TODO stop other services on that transport for the session with no app
+							SdlPacket endService = SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)packet.getVersion(),BitConverter.intToByteArray(hashId));
+							byte[] stopService = endService.constructPacket();
+							manuallyWriteBytes(packet.getTransportType(), stopService,0,stopService.length);
+						}else{
+	    					Log.w(TAG, "No where to send a packet from what appears to be a non primary transport");
+						}
+
+						return false;
 	    			}
+
+	    			//There is an app id and can continue to normal flow
 	    			byte version = (byte)packet.getVersion();
 	    			
 	    			if(isNewSessionRequest && version > 1 && packet.getFrameInfo() == SdlPacket.FRAME_INFO_START_SERVICE_ACK){ //we know this was a start session response
@@ -1873,7 +1926,7 @@ public class SdlRouterService extends Service{
 		private void attemptToCleanUpModule(int session, int version, TransportType primaryTransport){
 			Log.i(TAG, "Attempting to stop session " + session);
 			byte[] uai = createForceUnregisterApp((byte)session, (byte)version);
-			manuallyWriteBytes(uai,0,uai.length);
+			manuallyWriteBytes(primaryTransport,uai,0,uai.length);
 			int hashId = 0;
 			synchronized(this.SESSION_LOCK){
 				if(this.sessionHashIdMap.indexOfKey(session)>=0){
@@ -1883,7 +1936,7 @@ public class SdlRouterService extends Service{
 				}
 			}
 			byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)version,BitConverter.intToByteArray(hashId))).constructPacket();
-			manuallyWriteBytes(stopService,0,stopService.length);
+			manuallyWriteBytes(primaryTransport,stopService,0,stopService.length);
 		}
 		
 	    private boolean sendPacketMessageToClient(RegisteredApp app, Message message, byte version){
@@ -1899,19 +1952,22 @@ public class SdlRouterService extends Service{
 				for(int i=0; i<size;i++){
 					sessionId = sessions.get(i).intValue();
 					unregister = createForceUnregisterApp((byte)sessionId,version);
-					manuallyWriteBytes(unregister,0,unregister.length);
-					int hashId = 0;
-					synchronized(this.SESSION_LOCK){
-						if(this.sessionHashIdMap.indexOfKey(sessionId)>=0){
-							hashId = this.sessionHashIdMap.get(sessionId); 
+					List<TransportType> transportTypes = app.getTransportsForSession(sessionId);
+					if(transportTypes != null && !transportTypes.isEmpty()) {
+						manuallyWriteBytes(transportTypes.get(0),unregister, 0, unregister.length);
+						int hashId = 0;
+						synchronized (this.SESSION_LOCK) {
+							if (this.sessionHashIdMap.indexOfKey(sessionId) >= 0) {
+								hashId = this.sessionHashIdMap.get(sessionId);
+							}
 						}
-					}
-					stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)sessionId, 0, version,BitConverter.intToByteArray(hashId))).constructPacket();
-					
-					manuallyWriteBytes(stopService,0,stopService.length);
-					synchronized(SESSION_LOCK){
-						this.bluetoothSessionMap.remove(sessionId);
-						this.sessionHashIdMap.delete(sessionId);
+						stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte) sessionId, 0, version, BitConverter.intToByteArray(hashId))).constructPacket();
+
+						manuallyWriteBytes(transportTypes.get(0),stopService, 0, stopService.length);
+						synchronized (SESSION_LOCK) {
+							this.bluetoothSessionMap.remove(sessionId);
+							this.sessionHashIdMap.delete(sessionId);
+						}
 					}
 				}
 				synchronized(REGISTERED_APPS_LOCK){
@@ -2123,6 +2179,7 @@ public class SdlRouterService extends Service{
 	private String getAppIDForSession(int sessionId, boolean newSession, boolean newTransport, TransportType transportType){
 		synchronized(SESSION_LOCK){
 			//Log.d(TAG, "Looking for session: " + sessionId);
+			//First get the session map for the correct transport
 			SparseArray<String> sessionMap;
 			switch(transportType){
 				case BLUETOOTH:
@@ -2150,7 +2207,7 @@ public class SdlRouterService extends Service{
 					return null;
 			}
 
-			String appId = sessionMap.get(sessionId);// SdlRouterService.this.bluetoothSessionMap.get(sessionId);
+			String appId = sessionMap.get(sessionId);
 			if(appId==null){
 				// If service type is RPC then we know we need to just skip ahead and see if there
 				// is a registered app awaiting a session.
@@ -2173,37 +2230,33 @@ public class SdlRouterService extends Service{
 					}
 				}else if(newTransport){
 
-					// If  this is anything other than RPC with a start service response we can assume
+					// If this is anything other than RPC with a start service response we can assume
 					// the app wants to use a new transport as secondary.
 
 					// We would only receive a start service response for RPC service when an app is
 					// attempting to register for the first time. Other services can be ran on
 					//secondary transports.
 					switch (transportType){
-						case BLUETOOTH:
+						case BLUETOOTH:			//Check for BT as a secondary transport
 							//USB is potential primary
 							appId = usbSessionMap.get(sessionId);
+							// No other suitable transport for primary transport
+							break;
+						case USB:				//Check for USB as a secondary transport
+							//BT potential primary transport
+							appId = bluetoothSessionMap.get(sessionId);
+							// No other suitable transport for primary transport
+							break;
+						case TCP:				//Check for TCP as a secondary transport
+							//BT potential primary transport
+							appId =  bluetoothSessionMap.get(sessionId);
 							if(appId == null){
-									//TODO try TCP
-								}
-								break;
-							case USB:
-								//BT potential primary transport
-								appId = bluetoothSessionMap.get(sessionId);
-								if(appId == null){
-									//TODO try TCP
-								}
-								break;
-							case TCP:
-								//TODO TCP as secondary
-								appId =  bluetoothSessionMap.get(sessionId);
-								if(appId == null){
-									//TODO try USB
-									appId =  usbSessionMap.get(sessionId);
-								}
-								break;
-							default:
-								return null;
+								//USB is potential primary transport
+								appId =  usbSessionMap.get(sessionId);
+							}
+							break;
+						default:
+							return null;
 						}
 
 						if(appId != null){
@@ -2216,6 +2269,8 @@ public class SdlRouterService extends Service{
 									//session map associated with this transport
 									app.registerTransport(sessionId, transportType);
 									sessionMap.put(sessionId,appId);
+								}else{
+									Log.w(TAG, "No registered app found when register secondary transport");
 								}
 							}
 						}
@@ -2722,7 +2777,7 @@ public class SdlRouterService extends Service{
 		@SuppressWarnings("SameReturnValue")
 		public boolean handleIncommingClientMessage(final Bundle receivedBundle){
 			int flags = receivedBundle.getInt(TransportConstants.BYTES_TO_SEND_FLAGS, TransportConstants.BYTES_TO_SEND_FLAG_NONE);
-			TransportType transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT_FOR_PACKET));
+			TransportType transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT));
 
 			if(flags!=TransportConstants.BYTES_TO_SEND_FLAG_NONE){
 				byte[] packet = receivedBundle.getByteArray(TransportConstants.BYTES_TO_SEND_EXTRA_NAME); 
@@ -2784,7 +2839,7 @@ public class SdlRouterService extends Service{
 					byte[] bytes = buffer.getBytes();
 					PacketWriteTaskBlockingQueue queue = queues.get(transportType);
 					if (queue != null) {
-						queue.add(new PacketWriteTask(bytes, 0, bytes.length, this.priorityForBuffingMessage));
+						queue.add(new PacketWriteTask(bytes, 0, bytes.length, this.priorityForBuffingMessage,transportType));
 						PacketWriteTaskMaster packetWriteTaskMaster = packetWriteTaskMasterMap.get(transportType);
 						if (packetWriteTaskMaster != null) {
 							packetWriteTaskMaster.alert();
@@ -2907,13 +2962,19 @@ public class SdlRouterService extends Service{
 		TransportType transportType;
 		
 		@SuppressWarnings("SameParameterValue")
-		public PacketWriteTask(byte[] bytes, int offset, int size, int priorityCoefficient){
+		@Deprecated
+		public PacketWriteTask(byte[] bytes, int offset, int size, int priorityCoefficient) {
+			this(bytes, offset, size, priorityCoefficient,null);
+		}
+
+		public PacketWriteTask(byte[] bytes, int offset, int size, int priorityCoefficient, TransportType transportType){
 			timestamp = System.currentTimeMillis();
 			bytesToWrite = bytes;
 			this.offset = offset;
 			this.size = size;
 			this.priorityCoefficient = priorityCoefficient;
 			receivedBundle = null;
+			this.transportType = transportType;
 		}
 		
 		public PacketWriteTask(Bundle bundle){
@@ -2923,7 +2984,7 @@ public class SdlRouterService extends Service{
 			offset = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_OFFSET, 0); //If nothing, start at the beginning of the array
 			size = bundle.getInt(TransportConstants.BYTES_TO_SEND_EXTRA_COUNT, bytesToWrite.length);  //In case there isn't anything just send the whole packet.
 			this.priorityCoefficient = bundle.getInt(TransportConstants.PACKET_PRIORITY_COEFFICIENT,0); // Log.d(TAG, "packet priority coef: "+ this.priorityCoefficient);
-			this.transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT_FOR_PACKET));
+			this.transportType = TransportType.valueForString(receivedBundle.getString(TransportConstants.TRANSPORT));
 		}
 
 		public void setTransportType(TransportType transportType){
@@ -2932,10 +2993,10 @@ public class SdlRouterService extends Service{
 
 		@Override
 		public void run() {
-			if(receivedBundle!=null){
+			if(receivedBundle != null){
 				writeBytesToTransport(receivedBundle);
 			}else if(bytesToWrite !=null){
-				manuallyWriteBytes(bytesToWrite, offset, size);
+				manuallyWriteBytes(this.transportType, bytesToWrite, offset, size);
 			}
 		}
 		
