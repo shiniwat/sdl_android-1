@@ -312,6 +312,7 @@ public class TransportBroker {
             			if(bundle.containsKey(TransportConstants.CURRENT_HARDWARE_CONNECTED)){
 							ArrayList<TransportRecord> transports = bundle.getParcelableArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED);
 							broker.onHardwareConnected(transports);
+                            broker.notifyTransportChange(transports);
 						}
         				break;
         			}
@@ -425,6 +426,12 @@ public class TransportBroker {
 		}
 
 		public void onHardwareDisconnected(TransportRecord record, List<TransportRecord> connectedTransports){
+            // broadcast TRANSPORT_CHANGED -- because HARDWARE disconnect causes deadlock at packetizer, we'll do this after fixing the deadlock.
+			/*--
+			Intent broadcastIntent = new Intent(TransportConstants.SDL_TRANSPORT_CHANGED);
+			broadcastIntent.putExtra(TransportConstants.HARDWARE_DISCONNECTED, record.getType().name());
+			currentContext.sendBroadcast(broadcastIntent);
+			--*/
             routerServiceDisconnect();
 		}
 
@@ -471,7 +478,19 @@ public class TransportBroker {
 		public void onLegacyModeEnabled(){
 			
 		}
-		
+
+		public void notifyTransportChange(List<TransportRecord> transports) {
+            Log.d(TAG, "notifyTransportChange");
+			// broadcast TRANSPORT_CHANGED
+			Intent broadcastIntent = new Intent(TransportConstants.SDL_TRANSPORT_CHANGED);
+			ArrayList<String> transportsList = new ArrayList<>();
+			for (TransportRecord record: transports) {
+				transportsList.add(record.getType().name());
+			}
+			broadcastIntent.putStringArrayListExtra(TransportConstants.HARDWARE_CONNECTED, transportsList);
+			currentContext.sendBroadcast(broadcastIntent);
+		}
+
 		/**
 		 * We want to check to see if the Router service is already up and running
 		 * @param context

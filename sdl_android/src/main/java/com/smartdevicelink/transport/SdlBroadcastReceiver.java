@@ -71,7 +71,8 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
         		|| action.equalsIgnoreCase(ACL_CONNECTED)
         		|| action.equalsIgnoreCase(STATE_CHANGED)
         		|| action.equalsIgnoreCase(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)
-        		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION))){
+        		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)
+        		|| action.equalsIgnoreCase(TransportConstants.SDL_TRANSPORT_CHANGED))){
         	//We don't want anything else here if the child class called super and has different intent filters
         	//Log.i(TAG, "Unwanted intent from child class");
         	return;
@@ -83,20 +84,22 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 			onSdlEnabled(context, intent);
 			return;
         }
-        
+
 		boolean didStart = false;
 		if (localRouterClass == null){
 			localRouterClass = defineLocalSdlRouterClass();
-			ResolveInfo info = context.getPackageManager().resolveService(new Intent(context,localRouterClass),PackageManager.GET_META_DATA);
-			if(info != null){
-					if(info.filter == null || !info.filter.hasAction(TransportConstants.ROUTER_SERVICE_ACTION)){
+			if (localRouterClass != null) {
+				ResolveInfo info = context.getPackageManager().resolveService(new Intent(context, localRouterClass), PackageManager.GET_META_DATA);
+				if (info != null) {
+					if (info.filter == null || !info.filter.hasAction(TransportConstants.ROUTER_SERVICE_ACTION)) {
 						Log.e(TAG, "WARNING: This application has not specified its intent-filter for the SdlRouterService. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
 					}
-					if( info.serviceInfo.metaData == null || !info.serviceInfo.metaData.containsKey(context.getString(R.string.sdl_router_service_version_name))) {
+					if (info.serviceInfo.metaData == null || !info.serviceInfo.metaData.containsKey(context.getString(R.string.sdl_router_service_version_name))) {
 						Log.e(TAG, "WARNING: This application has not specified its metadata tags for the SdlRouterService. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
 					}
-			}else{
-				Log.e(TAG, "WARNING: This application has not specified its SdlRouterService correctly in the manifest. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+				} else {
+					Log.e(TAG, "WARNING: This application has not specified its SdlRouterService correctly in the manifest. THIS WILL THROW AN EXCEPTION IN FUTURE RELEASES!!");
+				}
 			}
 		}
         

@@ -180,24 +180,11 @@ public class TransportManager {
         public boolean onHardwareConnected(List<TransportRecord> transports) {
             Log.d(TAG, "onHardwareConnected - " +transports.size());
             super.onHardwareConnected(transports);
-            boolean containsUSB = false;
             synchronized (TRANSPORT_STATUS_LOCK){
                 transportStatus.clear();
                 transportStatus.addAll(transports);
-                for(TransportRecord record: transportStatus){
-                    Log.d(TAG, "Transport connected: " + record.getType().name());
-                    if (record.getType() == TransportType.USB) {
-                        containsUSB = true;
-                    }
-                }
             }
             transportListener.onTransportConnected(transports);
-            if (containsUSB) {
-                Log.d(TAG, "connectedHardware contains USB; going to send broadcast");
-                Intent usbAccessoryIntent = new Intent(USBTransport.ACTION_USB_ACCESSORY_ATTACHED);
-                usbAccessoryIntent.putExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, true);
-                AndroidTools.sendExplicitBroadcast(super.getContext(), usbAccessoryIntent, null);
-            }
             return true;
         }
 
