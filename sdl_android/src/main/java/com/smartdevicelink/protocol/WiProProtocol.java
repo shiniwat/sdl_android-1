@@ -824,10 +824,10 @@ public class WiProProtocol extends AbstractProtocol {
 						//Version is either not included or lower than 5.1.0
 						if(requiresHighBandwidth
 								&& TransportType.BLUETOOTH.equals(transportType)){
-						    // [shiniwa let's accept this for the time being.
+						    // [shiniwa] let's accept this for the time being.
 							//transport can't support high bandwidth
-							//onTransportNotAccepted(transportType + " can't support high bandwidth requirement, and secondary transport not supported in this protocol version: " + version.toString());
-							//return;
+							onTransportNotAccepted(transportType + " can't support high bandwidth requirement, and secondary transport not supported in this protocol version: " + version.toString());
+							return;
 						}
 						if(!activeTransportsHandled) {
 							availableTransports.add(transportType);
