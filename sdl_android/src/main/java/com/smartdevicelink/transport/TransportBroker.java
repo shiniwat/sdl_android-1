@@ -94,7 +94,7 @@ public class TransportBroker {
 				routerServiceMessenger = null;
 				registeredWithRouterService = false;
 				isBound = false;
-				onHardwareDisconnected(null);
+				onHardwareDisconnected(null, null);
 			}
 		};
 	}

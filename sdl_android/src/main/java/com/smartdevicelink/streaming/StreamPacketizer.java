@@ -36,7 +36,6 @@ public class StreamPacketizer extends AbstractPacketizer implements IVideoStream
 	private static final int MAX_QUEUE_SIZE = 256 * 1024;
 
 	public SdlConnection sdlConnection = null;	//TODO remove completely
-	private AbstractProtocol protocol;
     private Object mPauseLock;
     private boolean mPaused;
     private boolean isServiceProtected = false;
@@ -143,14 +142,12 @@ public class StreamPacketizer extends AbstractPacketizer implements IVideoStream
 		}
 		finally
 		{
-			if(protocol == null) {
+			if(_session == null) {
 				if (sdlConnection != null) {
-					protocol = sdlConnection.getWiProProtocol();
-					protocol.EndProtocolService(_serviceType,_rpcSessionID);
-					//sdlConnection.endService(_serviceType, _rpcSessionID);
+					sdlConnection.endService(_serviceType, _rpcSessionID);
 				}
 			}else{
-				protocol.EndProtocolService(_serviceType,_rpcSessionID);
+				_session.endService(_serviceType,_rpcSessionID);
 			}
 
 
@@ -172,9 +169,6 @@ public class StreamPacketizer extends AbstractPacketizer implements IVideoStream
         }
     }
 
-    public void setProtocol(AbstractProtocol protocol){
-		this.protocol = protocol;
-	}
 	/**
 	 * Called by the app.
 	 *

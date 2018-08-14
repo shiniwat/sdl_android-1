@@ -2,17 +2,13 @@ package com.smartdevicelink.SdlConnection;
 
 import android.annotation.SuppressLint;
 import android.os.Build;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Surface;
 
 import com.smartdevicelink.encoder.SdlEncoder;
 import com.smartdevicelink.encoder.VirtualDisplayEncoder;
 import com.smartdevicelink.exception.SdlException;
-import com.smartdevicelink.protocol.IProtocolListener;
 import com.smartdevicelink.protocol.ProtocolMessage;
-import com.smartdevicelink.protocol.SdlPacket;
-import com.smartdevicelink.protocol.WiProProtocol;
 import com.smartdevicelink.protocol.enums.SessionType;
 import com.smartdevicelink.protocol.heartbeat.IHeartbeatMonitor;
 import com.smartdevicelink.protocol.heartbeat.IHeartbeatMonitorListener;
@@ -32,10 +28,9 @@ import com.smartdevicelink.streaming.StreamRPCPacketizer;
 import com.smartdevicelink.streaming.video.RTPH264Packetizer;
 import com.smartdevicelink.streaming.video.VideoStreamingParameters;
 import com.smartdevicelink.transport.BaseTransportConfig;
+import com.smartdevicelink.transport.MultiplexTransport;
 import com.smartdevicelink.transport.MultiplexTransportConfig;
-import com.smartdevicelink.transport.TransportManager;
 import com.smartdevicelink.transport.enums.TransportType;
-import com.smartdevicelink.transport.utl.TransportRecord;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,80 +40,52 @@ import java.io.PipedOutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
-import java.util.HashMap;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
+@Deprecated
+public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorListener, IStreamListener, ISecurityInitializedListener {
 
-public class SdlSession implements  IProtocolListener, TransportManager.TransportEventListener, IHeartbeatMonitorListener, IStreamListener, ISecurityInitializedListener {
-    private static final String TAG = "SdlSession";
+   private static final String TAG = "SdlSession";
 
+    protected final static int BUFF_READ_SIZE = 1024;
 
-    protected byte sessionId;
-    protected ISdlConnectionListener sessionListener;
+	private static CopyOnWriteArrayList<SdlConnection> shareConnections = new CopyOnWriteArrayList<SdlConnection>();
+
+	private byte wiproProcolVer;
+
     protected BaseTransportConfig transportConfig;
+    protected ISdlConnectionListener sessionListener;
+	protected LockScreenManager lockScreenMan  = new LockScreenManager();
+	protected SdlSecurityBase sdlSecurity = null;
+	protected VideoStreamingParameters desiredVideoParams = null;
+	protected VideoStreamingParameters acceptedVideoParams = null;
 
-    protected LockScreenManager lockScreenMan  = new LockScreenManager();
-    private SdlSecurityBase sdlSecurity = null;
-    private final static int BUFF_READ_SIZE = 1024;
-    private int sessionHashId = 0;
-    private HashMap<SessionType, CopyOnWriteArrayList<ISdlServiceListener>> serviceListeners;
-    private VideoStreamingParameters desiredVideoParams = null;
-    private VideoStreamingParameters acceptedVideoParams = null;
-    private CopyOnWriteArrayList<SessionType> encryptedServices = new CopyOnWriteArrayList<SessionType>();
-    private boolean requestedSession = false;
+	protected byte sessionId;
+	protected int sessionHashId = 0;
+	protected HashMap<SessionType, CopyOnWriteArrayList<ISdlServiceListener>> serviceListeners;
+	protected CopyOnWriteArrayList<SessionType> encryptedServices = new CopyOnWriteArrayList<SessionType>();
 
-    IHeartbeatMonitor _outgoingHeartbeatMonitor = null;
-    IHeartbeatMonitor _incomingHeartbeatMonitor = null;
+
+	SdlConnection _sdlConnection = null;
+
+	IHeartbeatMonitor _outgoingHeartbeatMonitor = null;
+	IHeartbeatMonitor _incomingHeartbeatMonitor = null;
+
     StreamRPCPacketizer mRPCPacketizer = null;
     AbstractPacketizer mVideoPacketizer = null;
     StreamPacketizer mAudioPacketizer = null;
     SdlEncoder mSdlEncoder = null;
     VirtualDisplayEncoder virtualDisplayEncoder = null;
 
-    protected TransportManager transportManager;
-    protected WiProProtocol wiProProtocol;
-    Object PROTOCOL_REFERENCE_LOCK = new Object();
-
-
-    @Deprecated
     public static SdlSession createSession(byte wiproVersion, ISdlConnectionListener listener, BaseTransportConfig btConfig) {
 
         SdlSession session =  new SdlSession();
+        session.wiproProcolVer = wiproVersion;
         session.sessionListener = listener;
         session.transportConfig = btConfig;
 
         return session;
     }
-
-    public SdlSession(ISdlConnectionListener listener, MultiplexTransportConfig config){
-        Log.d(TAG, "SdlSession created");
-        transportConfig = config;
-        sessionListener = listener;
-        synchronized(PROTOCOL_REFERENCE_LOCK) {
-            List<TransportType> primaryTransports = config.getPrimaryTransports();
-            Log.d(TAG, "SdlSession: configured primary transports="+ primaryTransports);
-            wiProProtocol = new WiProProtocol(this);
-            wiProProtocol.setPrimaryTransports(primaryTransports);
-            wiProProtocol.setRequiresHighBandwidth(config.requiresHighBandwidth());
-        }
-
-        transportManager = new TransportManager(config,this);
-
-    }
-    public SdlSession(){
-
-    }
-
 
     public BaseTransportConfig getTransportConfig() {
         return this.transportConfig;
@@ -154,22 +121,21 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
         return this.sessionId;
     }
 
-    @Deprecated
     public SdlConnection getSdlConnection() {
-        return null;
+        return this._sdlConnection;
     }
 
     public int getMtu(){
-        if(this.wiProProtocol!=null){
-            return this.wiProProtocol.getMtu();
+        if(this._sdlConnection!=null){
+            return this._sdlConnection.getWiProProtocol().getMtu();
         }else{
             return 0;
         }
     }
 
     public long getMtu(SessionType type) {
-        if (this.wiProProtocol != null) {
-            return this.wiProProtocol.getMtu(type);
+        if (this._sdlConnection != null) {
+            return this._sdlConnection.getWiProProtocol().getMtu(type);
         } else {
             return 0;
         }
@@ -181,28 +147,31 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
             sdlSecurity.resetParams();
             sdlSecurity.shutDown();
         }
-        if(transportManager != null){
-            synchronized (PROTOCOL_REFERENCE_LOCK) {
-                wiProProtocol.EndProtocolSession(SessionType.RPC, sessionId, sessionHashId);
-                transportManager.close(sessionId);
+
+        if (_sdlConnection != null) { //sessionId == 0 means session is not started.
+            //_sdlConnection.unregisterSession(this);
+
+            if (_sdlConnection.getRegisterCount() == 0) {
+                shareConnections.remove(_sdlConnection);
             }
+
+            _sdlConnection = null;
         }
     }
-
 
     public void startStream(InputStream is, SessionType sType, byte rpcSessionID) throws IOException {
         if (sType.equals(SessionType.NAV))
         {
             // protocol is fixed to RAW
             StreamPacketizer packetizer = new StreamPacketizer(this, is, sType, rpcSessionID, this);
-            packetizer.setProtocol(wiProProtocol);
+            packetizer.sdlConnection = this.getSdlConnection();
             mVideoPacketizer = packetizer;
             mVideoPacketizer.start();
         }
         else if (sType.equals(SessionType.PCM))
         {
             mAudioPacketizer = new StreamPacketizer(this, is, sType, rpcSessionID, this);
-            mAudioPacketizer.setProtocol(wiProProtocol);
+            mAudioPacketizer.sdlConnection = this.getSdlConnection();
             mAudioPacketizer.start();
         }
     }
@@ -220,14 +189,14 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
         {
             // protocol is fixed to RAW
             StreamPacketizer packetizer = new StreamPacketizer(this, is, sType, rpcSessionID, this);
-            packetizer.setProtocol(wiProProtocol);
+            packetizer.sdlConnection = this.getSdlConnection();
             mVideoPacketizer = packetizer;
             mVideoPacketizer.start();
         }
         else if (sType.equals(SessionType.PCM))
         {
             mAudioPacketizer = new StreamPacketizer(this, is, sType, rpcSessionID, this);
-            mAudioPacketizer.setProtocol(wiProProtocol);
+            mAudioPacketizer.sdlConnection = this.getSdlConnection();
             mAudioPacketizer.start();
         }
         else
@@ -240,14 +209,13 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     public IVideoStreamListener startVideoStream() {
-        Log.d(TAG, "sdlSession.startVideoStream");
         byte rpcSessionID = getSessionId();
         VideoStreamingProtocol protocol = getAcceptedProtocol();
         try {
             switch (protocol) {
                 case RAW: {
                     StreamPacketizer packetizer = new StreamPacketizer(this, null, SessionType.NAV, rpcSessionID, this);
-                    packetizer.setProtocol(wiProProtocol);
+                    packetizer.sdlConnection = this.getSdlConnection();
                     mVideoPacketizer = packetizer;
                     mVideoPacketizer.start();
                     return packetizer;
@@ -268,14 +236,11 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     public IAudioStreamListener startAudioStream() {
-        if (mAudioPacketizer == null) {
-            return null;
-        }
         byte rpcSessionID = getSessionId();
         try {
             StreamPacketizer packetizer = new StreamPacketizer(this, null, SessionType.PCM, rpcSessionID, this);
+            packetizer.sdlConnection = this.getSdlConnection();
             mAudioPacketizer = packetizer;
-            mAudioPacketizer.setProtocol(wiProProtocol);
             mAudioPacketizer.start();
             return packetizer;
         } catch (IOException e) {
@@ -288,7 +253,7 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
             mRPCPacketizer = new StreamRPCPacketizer(null, this, is, request, sType, rpcSessionID, wiproVersion, 0, this);
             mRPCPacketizer.start();
         } catch (Exception e) {
-            Log.e("SdlConnection", "Unable to start streaming:" + e.toString());
+            Log.e(TAG, "Unable to start streaming:" + e.toString());
         }
     }
 
@@ -300,7 +265,7 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
             mRPCPacketizer.start();
             return os;
         } catch (Exception e) {
-            Log.e("SdlConnection", "Unable to start streaming:" + e.toString());
+            Log.e(TAG, "Unable to start streaming:" + e.toString());
         }
         return null;
     }
@@ -438,13 +403,13 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     public void startService (SessionType serviceType, byte sessionID, boolean isEncrypted) {
-        Log.d(TAG, "sdlSession.startService");
-        if (transportManager == null){
+        if (_sdlConnection == null)
             return;
-        }
 
-        if (isEncrypted){
-            if (sdlSecurity != null){
+        if (isEncrypted)
+        {
+            if (sdlSecurity != null)
+            {
                 List<SessionType> serviceList = sdlSecurity.getServiceList();
                 if (!serviceList.contains(serviceType))
                     serviceList.add(serviceType);
@@ -453,21 +418,16 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
             }
             return;
         }
-        synchronized (PROTOCOL_REFERENCE_LOCK) {
-            wiProProtocol.startService(serviceType, sessionID, isEncrypted);
-        }
+        _sdlConnection.startService(serviceType, sessionID, isEncrypted);
     }
 
     public void endService (SessionType serviceType, byte sessionID) {
-        if (transportManager == null) {
+        if (_sdlConnection == null)
             return;
-        }
-        synchronized (PROTOCOL_REFERENCE_LOCK) {
-            wiProProtocol.EndProtocolService(serviceType, sessionID);
-        }
+        _sdlConnection.endService(serviceType, sessionID);
     }
 
-    private void processControlService(ProtocolMessage msg) {
+    protected void processControlService(ProtocolMessage msg) {
         if (sdlSecurity == null)
             return;
         int ilen = msg.getData().length - 12;
@@ -487,7 +447,7 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
         protocolMessage.setSessionType(SessionType.CONTROL);
         protocolMessage.setData(returnBytes);
         protocolMessage.setFunctionID(0x01);
-        protocolMessage.setVersion(wiProProtocol.getMajorVersionByte());
+        protocolMessage.setVersion(wiproProcolVer);
         protocolMessage.setSessionID(getSessionId());
 
         //sdlSecurity.hs();
@@ -496,15 +456,38 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     public String getBroadcastComment(BaseTransportConfig myTransport) {
-        return "Multiplexing";
+        SdlConnection connection = null;
+        if (myTransport.shareConnection()) {
+            connection = findTheProperConnection(myTransport);
+        } else {
+            connection = this._sdlConnection;
+        }
+
+        if (connection != null)
+            return connection.getBroadcastComment();
+
+        return "";
     }
 
 
     public void startSession() throws SdlException {
-        transportManager.start();
+        SdlConnection connection = null;
+        if (this.transportConfig.shareConnection()) {
+            connection = findTheProperConnection(this.transportConfig);
+
+            if (connection == null) {
+                connection = new SdlConnection(this.transportConfig);
+                shareConnections.add(connection);
+            }
+        } else {
+            connection = new SdlConnection(this.transportConfig);
+        }
+
+        this._sdlConnection = connection;
+        connection.registerSession(this); //Handshake will start when register.
     }
 
-    private void initialiseSession() {
+    protected void initialiseSession() {
         if (_outgoingHeartbeatMonitor != null) {
             _outgoingHeartbeatMonitor.start();
         }
@@ -514,156 +497,40 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     public void sendMessage(ProtocolMessage msg) {
-        if (wiProProtocol == null){
+        if (_sdlConnection == null)
             return;
-        }
-        synchronized (PROTOCOL_REFERENCE_LOCK) {
-            wiProProtocol.SendMessage(msg);
-        }
+        _sdlConnection.sendMessage(msg);
     }
 
     public TransportType getCurrentTransportType() {
-        if (transportManager == null) {
+        if (_sdlConnection == null)
             return null;
-        }
-        return TransportType.MULTIPLEX;
-        //return transportManager.getPrimaryTransport();
+        return _sdlConnection.getCurrentTransportType();
     }
 
     public boolean getIsConnected() {
-        return transportManager != null && transportManager.isConnected(null,null);
+        if (_sdlConnection == null)
+            return false;
+        return _sdlConnection != null && _sdlConnection.getIsConnected();
     }
 
     public boolean isServiceProtected(SessionType sType) {
         return encryptedServices.contains(sType);
     }
 
-    /* ***********************************************************************************************************************************************************************
-     * *****************************************************************  Transport  ************************************************************************************
-     *************************************************************************************************************************************************************************/
-
-
     @Override
-    public void onPacketReceived(SdlPacket packet) {
-        synchronized (PROTOCOL_REFERENCE_LOCK) {
-            if (wiProProtocol != null) {
-                wiProProtocol.handlePacketReceived(packet);
-            }
-        }
-    }
-
-    @Override
-    public void onTransportConnected(List<TransportRecord> connectedTransports) {
-        synchronized (PROTOCOL_REFERENCE_LOCK) {
-            if (wiProProtocol != null) {
-                Log.d(TAG, "onTransportConnected");
-                //In the future we should move this logic into the Protocol Layer
-                TransportType type = wiProProtocol.getTransportForSession(SessionType.RPC);
-                if (type == null && !requestedSession) { //There is currently no transport registered
-                    requestedSession = true;
-                    transportManager.requestNewSession(wiProProtocol.getPreferredPrimaryTransport(connectedTransports));
-                }
-                wiProProtocol.onTransportsConnectedUpdate(connectedTransports);
-                wiProProtocol.printActiveTransports();
-            }
-        }
-    }
-
-    @Override
-    public void onTransportDisconnected(String info, TransportRecord disconnectedTransport, List<TransportRecord> connectedTransports) {
-        if (disconnectedTransport == null) {
-            Log.d(TAG, "onTransportDisconnected");
-            return;
-        } else {
-            Log.d(TAG, "onTransportDisconnected - " + disconnectedTransport.getType().name());
-        }
-
-        //In the future we will actually compare the record but at this point we can assume only
-        //a single transport record per transport.
-        TransportType type = disconnectedTransport.getType();
-        if(type.equals(wiProProtocol.getTransportForSession(SessionType.NAV))){
-            stopVideoStream();
-            Log.d(TAG, "Stopping video stream.");
-        }
-        if(type.equals(wiProProtocol.getTransportForSession(SessionType.PCM))){
-            stopAudioStream();
-            Log.d(TAG, "Stopping audio stream.");
-        }
-
-        Log.d(TAG, "rpc transport? - " + wiProProtocol.getTransportForSession(SessionType.RPC));
-        if(type.equals(wiProProtocol.getTransportForSession(SessionType.RPC))){
-            final MultiplexTransportConfig config = (MultiplexTransportConfig)this.transportConfig;
-            List<TransportType> transportTypes = config.getPrimaryTransports();
-            //transportTypes.remove(type);
-            boolean primaryTransportAvailable = false;
-            if(transportTypes.size() > 1){
-                for (TransportType transportType: transportTypes){ Log.d(TAG, "Checking " + transportType.name());
-                    if( type != null && !type.equals(transportType)
-                            && transportManager != null
-                            && transportManager.isConnected(transportType,null)){
-                        Log.d(TAG, "Found a suitable transport");
-                        primaryTransportAvailable = wiProProtocol.getProtocolVersion().isNewerThan(new com.smartdevicelink.util.Version("5.1.0")) >= 1;
-                        ((MultiplexTransportConfig) this.transportConfig).setService(transportManager.getRouterService());
-                        break;
-                    }
-                }
-            }
-            this.transportManager.close(this.sessionId);
-            this.transportManager = null;
-            requestedSession = false;
-            this.sessionListener.onTransportDisconnected(info, primaryTransportAvailable, (MultiplexTransportConfig)this.transportConfig);
-
-        }else{
-            Log.d(TAG, "Transport was not primary, continuing to stay connected");
-        }
-
-    }
-
-    @Override
-    public boolean onLegacyModeEnabled(String info){
-        //Clear our wiproprotocol and await a connection from the legacy transport
-        Log.d(TAG, info);
-        MultiplexTransportConfig config = (MultiplexTransportConfig)transportConfig;
-        if(config.getPrimaryTransports().contains(TransportType.BLUETOOTH)
-                && !config.requiresHighBandwidth()){
-            Log.d(TAG, "Entering legacy mode; creating new protocol instance");
-            synchronized (PROTOCOL_REFERENCE_LOCK) {
-                wiProProtocol = new WiProProtocol(this);
-                wiProProtocol.setPrimaryTransports(((MultiplexTransportConfig) transportConfig).getPrimaryTransports());
-            }
-            return true;
-        }else{
-            Log.d(TAG, "Bluetooth is not an acceptable transport; not moving to legacy mode");
-            return false;
-        }
-    }
-
-    public void onError(String info){
-        shutdown(info);
-    }
-
-    public void shutdown(String info){
-        Log.d(TAG, "Shutdown - " + info);
+    public void onTransportDisconnected(String info) {
         this.sessionListener.onTransportDisconnected(info);
-
     }
 
-    //OLD
-
-    public void onTransportDisconnected(String info){ }
-    public void onTransportError(String info, Exception e){	}
-
-
-    /* ***********************************************************************************************************************************************************************
-     * *****************************************************************  IProtocol Listener  ********************************************************************************
-     *************************************************************************************************************************************************************************/
+    @Override
+    public void onTransportDisconnected(String info, boolean availablePrimary, MultiplexTransportConfig transportConfig) {
+        this.sessionListener.onTransportDisconnected(info);
+    }
 
     @Override
-    public void onProtocolMessageBytesToSend(SdlPacket packet) {
-        //Log.d(TAG, "onProtocolMessageBytesToSend - " + packet.getTransportType());
-        if(transportManager != null){
-            transportManager.sendPacket(packet);
-        }
+    public void onTransportError(String info, Exception e) {
+        this.sessionListener.onTransportError(info, e);
     }
 
     @Override
@@ -676,9 +543,16 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
         this.sessionListener.onProtocolMessageReceived(msg);
     }
 
+    @Override
+    public void onHeartbeatTimedOut(byte sessionID) {
+        this.sessionListener.onHeartbeatTimedOut(sessionID);
+
+    }
+
 
     @Override
-    public void onProtocolSessionStarted(SessionType sessionType, byte sessionID, byte version, String correlationID, int hashID, boolean isEncrypted) {
+    public void onProtocolSessionStarted(SessionType sessionType,
+                                         byte sessionID, byte version, String correlationID, int hashID, boolean isEncrypted) {
         this.sessionId = sessionID;
         lockScreenMan.setSessionID(sessionID);
         if (isEncrypted)
@@ -716,35 +590,38 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     @Override
-    public void connectSecondaryTransport(byte sessionId, TransportType transportType, Bundle params) {
-        Log.d(TAG, "Connect Secondary Transport");
-        transportManager.requestSecondaryTransportConnection(sessionId, params);
-    }
-
-    @Override
     public void sendHeartbeat(IHeartbeatMonitor monitor) {
         Log.d(TAG, "Asked to send heartbeat");
-        if (wiProProtocol != null)
-            synchronized (PROTOCOL_REFERENCE_LOCK) {
-                wiProProtocol.SendHeartBeat(sessionId);
-            }
+        if (_sdlConnection != null)
+            _sdlConnection.sendHeartbeat(this);
     }
 
     @Override
     public void heartbeatTimedOut(IHeartbeatMonitor monitor) {
+        if (_sdlConnection != null)
+            _sdlConnection._connectionListener.onHeartbeatTimedOut(this.sessionId);
         close();
     }
 
-    public void onHeartbeatTimedOut(byte sessionId){
-        //TODO
-    }
+    private static SdlConnection findTheProperConnection(BaseTransportConfig config) {
+        SdlConnection connection = null;
 
-    public void onProtocolSessionStartedNACKed(SessionType sessionType, byte sessionID, byte version, String correlationID, List<String> rejectedParams){
-        onProtocolSessionNACKed(sessionType,sessionID,version,correlationID,rejectedParams);
+        int minCount = 0;
+        for (SdlConnection c : shareConnections) {
+            if (c.getCurrentTransportType() == config.getTransportType()) {
+                if (minCount == 0 || minCount >= c.getRegisterCount()) {
+                    connection = c;
+                    minCount = c.getRegisterCount();
+                }
+            }
+        }
+
+        return connection;
     }
 
     @Override
-    public void onProtocolSessionNACKed(SessionType sessionType, byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
+    public void onProtocolSessionStartedNACKed(SessionType sessionType,
+                                               byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
         this.sessionListener.onProtocolSessionStartedNACKed(sessionType,
                 sessionID, version, correlationID, rejectedParams);
         if(serviceListeners != null && serviceListeners.containsKey(sessionType)){
@@ -768,39 +645,14 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
     }
 
     @Override
-    public void onProtocolHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
-    @Override
-    public void onProtocolHeartbeatACK(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
-    @Override
     public void onProtocolServiceDataACK(SessionType sessionType, int dataSize, byte sessionID) {
         this.sessionListener.onProtocolServiceDataACK(sessionType, dataSize, sessionID);
     }
 
     @Override
-    public void onResetOutgoingHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
-    @Override
-    public void onResetIncomingHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
-    /* ***********************************************************************************************************************************************************************
-     * *****************************************************************  Security Listener  *********************************************************************************
-     *************************************************************************************************************************************************************************/
-
-
-    @Override
     public void onSecurityInitialized() {
 
-        if (wiProProtocol != null && sdlSecurity != null)
+        if (_sdlConnection != null && sdlSecurity != null)
         {
             List<SessionType> list = sdlSecurity.getServiceList();
 
@@ -811,25 +663,38 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
                 service = iter.next();
 
                 if (service != null)
-                    synchronized (PROTOCOL_REFERENCE_LOCK) {
-                        wiProProtocol.StartProtocolService(service, getSessionId(), true);
-                    }
+                    _sdlConnection.startService(service, getSessionId(), true);
 
                 iter.remove();
             }
         }
     }
 
-    @Deprecated
     public void clearConnection(){
+        _sdlConnection = null;
     }
 
-    @Deprecated
-    public static void removeConnection(SdlConnection connection){
-    }
-
-    @Deprecated
     public void checkForOpenMultiplexConnection(SdlConnection connection){
+        removeConnection(connection);
+        connection.unregisterSession(this);
+        _sdlConnection = null;
+        for (SdlConnection c : shareConnections) {
+            if (c.getCurrentTransportType() == TransportType.MULTIPLEX) {
+                if(c.getIsConnected() || ((MultiplexTransport)c._transport).isPendingConnected()){
+                    _sdlConnection = c;
+                    try {
+                        _sdlConnection.registerSession(this);//Handshake will start when register.
+                    } catch (SdlException e) {
+                        e.printStackTrace();
+                    }
+                    return;
+                }
+
+            }
+        }
+    }
+    public static boolean removeConnection(SdlConnection connection){
+        return shareConnections.remove(connection);
     }
 
     public void addServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener){
@@ -880,7 +745,7 @@ public class SdlSession implements  IProtocolListener, TransportManager.Transpor
         return acceptedVideoParams;
     }
 
-    public VideoStreamingProtocol getAcceptedProtocol() {
+    private VideoStreamingProtocol getAcceptedProtocol() {
         // acquire default protocol (RAW)
         VideoStreamingProtocol protocol = new VideoStreamingParameters().getFormat().getProtocol();
 
