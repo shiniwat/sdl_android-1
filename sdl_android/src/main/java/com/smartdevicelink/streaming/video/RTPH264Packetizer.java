@@ -296,6 +296,9 @@ public class RTPH264Packetizer extends AbstractPacketizer implements IVideoStrea
 	}
 
 	private boolean outputRTPFrames(ByteBuffer nalUnit, long ptsInUs, boolean isLast) {
+		if (mPaused || mThread == null) {
+			return false;
+		}
 		if (RTP_HEADER_LEN + nalUnit.remaining() > MAX_RTP_PACKET_SIZE) {
 			// Split into multiple Fragmentation Units ([5.8] in RFC 6184)
 			byte firstByte = nalUnit.get();
