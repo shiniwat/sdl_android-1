@@ -72,7 +72,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
         		|| action.equalsIgnoreCase(STATE_CHANGED)
         		|| action.equalsIgnoreCase(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)
         		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)
-        		|| action.equalsIgnoreCase(TransportConstants.SDL_TRANSPORT_CHANGED))){
+        		|| action.equalsIgnoreCase(TransportConstants.SDL_TRANSPORT_CONNECTED))){
         	//We don't want anything else here if the child class called super and has different intent filters
         	//Log.i(TAG, "Unwanted intent from child class");
         	return;

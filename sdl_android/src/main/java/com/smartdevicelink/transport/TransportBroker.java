@@ -312,7 +312,7 @@ public class TransportBroker {
             			if(bundle.containsKey(TransportConstants.CURRENT_HARDWARE_CONNECTED)){
 							ArrayList<TransportRecord> transports = bundle.getParcelableArrayList(TransportConstants.CURRENT_HARDWARE_CONNECTED);
 							broker.onHardwareConnected(transports);
-                            broker.notifyTransportChange(transports);
+                            broker.notifyTransportConnected(transports);
 						}
         				break;
         			}
@@ -426,12 +426,6 @@ public class TransportBroker {
 		}
 
 		public void onHardwareDisconnected(TransportRecord record, List<TransportRecord> connectedTransports){
-            // broadcast TRANSPORT_CHANGED -- because HARDWARE disconnect causes deadlock at packetizer, we'll do this after fixing the deadlock.
-			/*--
-			Intent broadcastIntent = new Intent(TransportConstants.SDL_TRANSPORT_CHANGED);
-			broadcastIntent.putExtra(TransportConstants.HARDWARE_DISCONNECTED, record.getType().name());
-			currentContext.sendBroadcast(broadcastIntent);
-			--*/
             routerServiceDisconnect();
 		}
 
@@ -479,10 +473,10 @@ public class TransportBroker {
 			
 		}
 
-		public void notifyTransportChange(List<TransportRecord> transports) {
-            Log.d(TAG, "notifyTransportChange");
+		public void notifyTransportConnected(List<TransportRecord> transports) {
+			Log.d(TAG, "notifyTransportConnected");
 			// broadcast TRANSPORT_CHANGED
-			Intent broadcastIntent = new Intent(TransportConstants.SDL_TRANSPORT_CHANGED);
+			Intent broadcastIntent = new Intent(TransportConstants.SDL_TRANSPORT_CONNECTED);
 			ArrayList<String> transportsList = new ArrayList<>();
 			for (TransportRecord record: transports) {
 				transportsList.add(record.getType().name());
