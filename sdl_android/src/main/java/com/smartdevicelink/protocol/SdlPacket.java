@@ -75,6 +75,8 @@ public class SdlPacket implements Parcelable{
 	int priorityCoefficient;
 	byte[] payload = null;
 	HashMap<String, Object> bsonPayload;
+
+	int messagingVersion = 1;
 	TransportType transportType;
 
 	public SdlPacket(int version, boolean encryption, int frameType,
@@ -317,6 +319,10 @@ public class SdlPacket implements Parcelable{
 
 		return builder.toString();
 	}
+
+	public void setMessagingVersion(int version){
+		this.messagingVersion = version;
+	}
 	
 	
 	
@@ -324,13 +330,7 @@ public class SdlPacket implements Parcelable{
 	 * ***********************************************************  Parceable Overrides  *****************************************************************
 	 *****************************************************************************************************************************************************/
 
-	/**
-	 * Version 2 additions
-	 * -----------------------------
-	 * <br>TransportType Included   | 1 if included, 0 if not
-	 * <br>TransportType Name   | String of transport type name
-	 */
-	private static final int PARCEL_VERSION = 2;
+
 
 	//I think this is FIFO...right?
 	public SdlPacket(Parcel p) {
@@ -346,11 +346,12 @@ public class SdlPacket implements Parcelable{
 			payload = new byte[dataSize];
 			p.readByteArray(payload);
 		}
+
 		this.priorityCoefficient = p.readInt();
 
 		if(p.dataAvail() > 0) {
-			int parcelVersion = p.readInt();
-			if(parcelVersion >= 2) {
+			messagingVersion = p.readInt();
+			if(messagingVersion >= 2) {
 				if (p.readInt() == 1) { //We should have a transport type attached
 					String transportName = p.readString();
 					if(transportName != null){
@@ -359,7 +360,6 @@ public class SdlPacket implements Parcelable{
 				}
 			}
 		}
-
 	}
 	
 	
@@ -386,11 +386,13 @@ public class SdlPacket implements Parcelable{
 		dest.writeInt(priorityCoefficient);
 
 		///Additions after initial creation
-		dest.writeInt(PARCEL_VERSION);
+		if(messagingVersion > 1){
+			dest.writeInt(messagingVersion);
 
-		dest.writeInt(transportType!=null? 1 : 0);
-		if(transportType != null){
-			dest.writeString(transportType.name());
+			dest.writeInt(transportType!=null? 1 : 0);
+			if(transportType != null){
+				dest.writeString(transportType.name());
+			}
 		}
 
 	}
