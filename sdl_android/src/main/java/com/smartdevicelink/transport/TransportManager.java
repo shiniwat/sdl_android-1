@@ -64,11 +64,15 @@ public class TransportManager {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
+        Log.d(TAG, "config.service in TransportManager is " + config.service);
         contextWeakReference = new WeakReference<>(config.context);
         RouterServiceValidator validator = new RouterServiceValidator(config.context,config.service);
         if(validator.validate()){
             //transport = new TransportBrokerImpl(config.context, config.appId,config.service);
             ConditionVariable cond = new ConditionVariable();
+            if (config.service == null) {
+                config.service = validator.getService();
+            }
             _brokerThread = new TransportBrokerThread(config.context, config.appId, config.service, cond);
             _brokerThread.start();
             cond.block();
