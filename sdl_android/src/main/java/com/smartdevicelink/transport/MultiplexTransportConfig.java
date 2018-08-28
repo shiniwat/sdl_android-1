@@ -125,7 +125,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 	 * This will set the order in which a primary transport is determined to be accepted or not.
 	 * In the case of previous protocol versions ( < 5.1)
 	 * @param transports
-	 *
+	 **/
 	public void setSecondaryTransports(List<TransportType> transports){
 		if(transports != null){
 			//Sanitize
@@ -137,6 +137,6 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 	public List<TransportType> getSecondaryTransports(){
 		return this.secondaryTransports;
 	}
-	*/
+
 
 }
