@@ -64,7 +64,6 @@ public class TransportConstants {
 	public static final String SDL_NOTIFICATION_CHANNEL_ID 						= "sdl_notification_channel";
 	public static final String SDL_NOTIFICATION_CHANNEL_NAME 					= "SmartDeviceLink";
 
-    public static final String SDL_TRANSPORT_CONNECTED                          = "sdl.transport.connected";
 
 	/**
 	 * This class houses all important router service versions

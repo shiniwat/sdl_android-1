@@ -67,8 +67,7 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 
         if(!(action.equalsIgnoreCase(BluetoothDevice.ACTION_ACL_CONNECTED)
         		|| action.equalsIgnoreCase(USBTransport.ACTION_USB_ACCESSORY_ATTACHED)
-        		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)
-        		|| action.equalsIgnoreCase(TransportConstants.SDL_TRANSPORT_CONNECTED))){
+        		|| action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION))) {
         	//We don't want anything else here if the child class called super and has different intent filters
         	//Log.i(TAG, "Unwanted intent from child class");
         	return;
@@ -118,8 +117,8 @@ public abstract class SdlBroadcastReceiver extends BroadcastReceiver{
 		}
         
 		//This will only be true if we are being told to reopen our SDL service because SDL is enabled
-		if(action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)){ 
-			if(intent.hasExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA)){	
+		if(action.equalsIgnoreCase(TransportConstants.START_ROUTER_SERVICE_ACTION)){
+			if(intent.hasExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA)){
 				if(intent.getBooleanExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_EXTRA, false)){
 					String packageName = intent.getStringExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_APP_PACKAGE);
 					final ComponentName componentName = intent.getParcelableExtra(TransportConstants.START_ROUTER_SERVICE_SDL_ENABLED_CMP_NAME);
