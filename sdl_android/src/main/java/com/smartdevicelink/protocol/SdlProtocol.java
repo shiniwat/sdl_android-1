@@ -327,9 +327,11 @@ public class SdlProtocol {
      */
     private TransportType getPreferredTransport(List<TransportType> preferredList, List<TransportRecord> connectedTransports) {
         for (TransportType transportType : preferredList) {
-            for(TransportRecord record: connectedTransports) {
-                if (record.getType().equals(transportType)) {
-                    return transportType;
+            if (connectedTransports instanceof List) {
+                for (TransportRecord record : connectedTransports) {
+                    if (record.getType().equals(transportType)) {
+                        return transportType;
+                    }
                 }
             }
         }
@@ -726,7 +728,13 @@ public class SdlProtocol {
                 header.setTransportType(transportType);
                 handlePacketToSend(header);
             }else{
-                Log.w(TAG, "Not sending end session packet because there is no session on that transport");
+                if (serviceType.equals(SessionType.NAV) && activeTransports.containsValue(TransportType.USB)) {
+                    Log.d(TAG, "activeTransports =" + activeTransports.values() + " Let's try endSession");
+                    header.setTransportType(TransportType.USB);
+                    handlePacketToSend(header);
+                } else {
+                    Log.w(TAG, "Not sending end session packet because there is no session on that transport");
+                }
             }
         }
     }

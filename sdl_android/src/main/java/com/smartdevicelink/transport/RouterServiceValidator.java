@@ -28,6 +28,7 @@ import android.util.Log;
 import com.smartdevicelink.util.AndroidTools;
 import com.smartdevicelink.util.HttpRequestTask;
 import com.smartdevicelink.util.HttpRequestTask.HttpRequestTaskCallback;
+import com.smartdevicelink.util.SdlAppInfo;
 
 /**
  * This class will tell us if the currently running router service is valid or not.
@@ -44,7 +45,7 @@ public class RouterServiceValidator {
 
 	private static final String REQUEST_PREFIX = "https://woprjr.smartdevicelink.com/api/1/applications/queryTrustedRouters"; 
 
-	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] } }}"; 
+	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }}}";
 	
 	
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
@@ -138,13 +139,21 @@ public class RouterServiceValidator {
 					return false;
 				}
 			}else{
-				wakeUpRouterServices();
-				return false;
+				List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(this.context, new SdlAppInfo.BestRouterComparator());
+				if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
+					SdlAppInfo info = sdlAppInfoList.get(0);
+					this.service = info.getRouterServiceComponentName();
+				}
+				if (this.service == null) {
+					Log.e(TAG, "Router service not found on Android O+; returning false");
+					wakeUpRouterServices();
+					return false;
+				}
 			}
 
 		}
 		
-		//Log.d(TAG, "Checking app package: " + service.getClassName());
+		Log.d(TAG, "Checking app package: " + service.getClassName());
 		packageName = this.appPackageForComponentName(service, pm);
 		
 
@@ -154,7 +163,8 @@ public class RouterServiceValidator {
 					return true;
 				}
 			}
-		}//No running service found. Might need to attempt to start one
+		}
+		Log.e(TAG, "RouterService is not found. About waking up local router service");
 		//TODO spin up a known good router service
 		wakeUpRouterServices();
 		return false;
