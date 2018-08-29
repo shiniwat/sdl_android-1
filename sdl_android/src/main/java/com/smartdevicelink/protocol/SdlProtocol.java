@@ -728,7 +728,7 @@ public class SdlProtocol {
                 header.setTransportType(transportType);
                 handlePacketToSend(header);
             }else{
-                if (serviceType.equals(SessionType.NAV) && activeTransports.containsValue(TransportType.USB)) {
+                if ((serviceType.equals(SessionType.NAV) || serviceType.equals(SessionType.PCM)) && activeTransports.containsValue(TransportType.USB)) {
                     Log.d(TAG, "activeTransports =" + activeTransports.values() + " Let's try endSession");
                     header.setTransportType(TransportType.USB);
                     handlePacketToSend(header);
