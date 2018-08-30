@@ -731,7 +731,7 @@ public class SdlProtocol {
             }else{
                 if ((serviceType.equals(SessionType.NAV) || serviceType.equals(SessionType.PCM)) && activeTransports.containsValue(TransportType.USB)) {
                     Log.d(TAG, "activeTransports =" + activeTransports.values() + " Let's try endSession");
-                    header.setTransportType(TransportType.USB);
+                    header.setTransportRecord(new TransportRecord(TransportType.USB, null));
                     handlePacketToSend(header);
                 } else {
                     Log.w(TAG, "Not sending end session packet because there is no session on that transport");
