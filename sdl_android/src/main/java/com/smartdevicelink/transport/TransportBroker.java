@@ -37,9 +37,7 @@ public class TransportBroker {
 	private static final String TAG = "SdlTransportBroker";
 
 	/**
-	 * Version 2 additions
-	 * -----------------------------
-	 * <br>TransportRecord as a parcel
+	 * See version document included with library
 	 */
 	private static final int MAX_MESSAGING_VERSION = 2;
 	private static final int MIN_MESSAGING_VERSION = 1;
@@ -529,9 +527,11 @@ public class TransportBroker {
 				bundle.putInt(TransportConstants.BYTES_TO_SEND_EXTRA_COUNT, bytes.length);
 				bundle.putInt(TransportConstants.BYTES_TO_SEND_FLAGS, TransportConstants.BYTES_TO_SEND_FLAG_NONE);
 				bundle.putInt(TransportConstants.PACKET_PRIORITY_COEFFICIENT, packet.getPrioirtyCoefficient());
-				if(packet.getTransportType() != null){
+				if(packet.getTransportRecord() != null){
 					//Log.d(TAG, "Sending packet on transport " + packet.getTransportType().name());
-					bundle.putString(TransportConstants.TRANSPORT, packet.getTransportType().name());
+					TransportRecord record = packet.getTransportRecord();
+					bundle.putString(TransportConstants.TRANSPORT_TYPE, record.getType().name());
+					bundle.putString(TransportConstants.TRANSPORT_ADDRESS, record.getAddress());
 				}else{
 					//Log.d(TAG, "No transport to be found");
 				}
@@ -543,7 +543,7 @@ public class TransportBroker {
 				//Log.w(TAG, "Message too big for single IPC transaction. Breaking apart. Size - " +  bytes.length);
 				ByteArrayMessageSpliter splitter = new ByteArrayMessageSpliter(appId,TransportConstants.ROUTER_SEND_PACKET,bytes,packet.getPrioirtyCoefficient() );	
 				splitter.setRouterServiceVersion(routerServiceVersion);
-				splitter.setTransportType(packet.getTransportType());
+				splitter.setTransportRecord(packet.getTransportRecord());
 				while(splitter.isActive()){
 					sendMessageToRouterService(splitter.nextMessage());
 				}
@@ -700,8 +700,8 @@ public class TransportBroker {
 			requestNewSession(null);
 		}
 
-		public void requestNewSession(TransportType transportType){
-			Log.d(TAG, "requestNewSession: " + transportType.name());
+		public void requestNewSession(TransportRecord transportRecord){
+			Log.d(TAG, "requestNewSession: " + transportRecord.getType().name());
 			Message msg = Message.obtain();
 			msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
 			msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
@@ -710,8 +710,9 @@ public class TransportBroker {
 				bundle.putLong(TransportConstants.APP_ID_EXTRA,convertAppId(appId));
 			}
 			bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-			if(transportType != null) {
-				bundle.putString(TransportConstants.ROUTER_REQUEST_NEW_SESSION_TRANSPORT_TYPE, transportType.name());
+			if(transportRecord != null) {
+				bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
+				bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
 			}
 			msg.setData(bundle);
 			this.sendMessageToRouterService(msg);

@@ -158,7 +158,8 @@ public class TransportConstants {
 	 */
 	public static final int ROUTER_REQUEST_NEW_SESSION 									= 0x12;
 	//Request arguments
-	public static final String ROUTER_REQUEST_NEW_SESSION_TRANSPORT_TYPE 				= "transportType";
+	//See TRANSPORT_TYPE & TRANSPORT_ADDRESS
+
 
 	public static final int ROUTER_REQUEST_NEW_SESSION_RESPONSE							= 0x13;
 	//Response arguments
@@ -206,7 +207,8 @@ public class TransportConstants {
 	
 	public static final String PACKET_PRIORITY_COEFFICIENT					= "priority_coefficient";
 
-	public static final String TRANSPORT 									= "transport";
+	public static final String TRANSPORT_TYPE 								= "transport_type";
+	public static final String TRANSPORT_ADDRESS							= "transport_address";
 
 	public static final int BYTES_TO_SEND_FLAG_NONE								= 0x00;
 	public static final int BYTES_TO_SEND_FLAG_SDL_PACKET_INCLUDED				= 0x01;
