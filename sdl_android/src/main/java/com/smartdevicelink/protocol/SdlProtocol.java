@@ -28,6 +28,7 @@ import com.smartdevicelink.util.Version;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
@@ -729,7 +730,16 @@ public class SdlProtocol {
                 header.setTransportRecord(transportRecord);
                 handlePacketToSend(header);
             }else{
-                if ((serviceType.equals(SessionType.NAV) || serviceType.equals(SessionType.PCM)) && activeTransports.containsValue(TransportType.USB)) {
+                // the sessionID mapping does not seem to work for older Core.
+                Collection<TransportRecord> records = activeTransports.values();
+                boolean containsUsb = false;
+                for (TransportRecord current: records) {
+                    if (current.getType().equals(TransportType.USB)) {
+                        containsUsb = true;
+                        break;
+                    }
+                }
+                if ((serviceType.equals(SessionType.NAV) || serviceType.equals(SessionType.PCM)) && containsUsb) {
                     Log.d(TAG, "activeTransports =" + activeTransports.values() + " Let's try endSession");
                     header.setTransportRecord(new TransportRecord(TransportType.USB, null));
                     handlePacketToSend(header);
