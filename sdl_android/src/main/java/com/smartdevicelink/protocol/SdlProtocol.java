@@ -1054,20 +1054,21 @@ public class SdlProtocol {
             //In the future we will actually compare the record but at this point we can assume only
             //a single transport record per transport.
             //TransportType type = disconnectedTransport.getType();
-            if(disconnectedTransport.equals(getTransportForSession(SessionType.NAV))){
+            if(getTransportForSession(SessionType.NAV) != null && disconnectedTransport.getType().equals(getTransportForSession(SessionType.NAV).getType())){
                 //stopVideoStream();
                 iSdlProtocol.stopStream(SessionType.NAV);
                 Log.d(TAG, "Stopping video stream.");
             }
-            if(disconnectedTransport.equals(getTransportForSession(SessionType.PCM))){
+            if(getTransportForSession(SessionType.PCM) != null && disconnectedTransport.getType().equals(getTransportForSession(SessionType.PCM).getType())){
                 //stopAudioStream();
                 iSdlProtocol.stopStream(SessionType.PCM);
                 Log.d(TAG, "Stopping audio stream.");
             }
 
             Log.d(TAG, "rpc transport? - " + getTransportForSession(SessionType.RPC));
-            if(disconnectedTransport.equals(getTransportForSession(SessionType.RPC))){
+            if(getTransportForSession(SessionType.RPC) != null && disconnectedTransport.getType().equals(getTransportForSession(SessionType.RPC).getType())){
                 //transportTypes.remove(type);
+                Log.d(TAG, "RPC transport has been disconnected");
                 boolean primaryTransportAvailable = false;
                 if(requestedPrimaryTransports != null && requestedPrimaryTransports.size() > 1){
                     for (TransportType transportType: requestedPrimaryTransports){ Log.d(TAG, "Checking " + transportType.name());
