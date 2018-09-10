@@ -99,6 +99,10 @@ public enum FunctionID{
     private final int                       ID;
     private final String                    JSON_NAME;
 
+    public String getJsonName() {
+        return JSON_NAME;
+    }
+
     private FunctionID(int id, String jsonName){
         this.ID = id;
         this.JSON_NAME = jsonName;
