@@ -1,8 +1,5 @@
-// New version
-
 package com.smartdevicelink.SdlConnection;
 
-import android.os.Bundle;
 import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
@@ -21,22 +18,22 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+@SuppressWarnings({"WeakerAccess", "deprecation"})
 public class SdlSession2 extends SdlSession implements ISdlProtocol{
     private static final String TAG = "SdlSession2";
 
 
-    protected SdlProtocol sdlProtocol;
+    final protected SdlProtocol sdlProtocol;
 
+    @SuppressWarnings("SameReturnValue")
     @Deprecated
-    public static SdlSession2 createSession(byte wiproVersion, ISdlConnectionListener listener, BaseTransportConfig btConfig) {
+    public static SdlSession2 createSession(byte protocolVersion, ISdlConnectionListener listener, BaseTransportConfig btConfig) {
         return null;
     }
 
     public SdlSession2(ISdlConnectionListener listener, MultiplexTransportConfig config){
-        Log.d(TAG, "SdlSession created");
         this.transportConfig = config;
         this.sessionListener = listener;
-
         this.sdlProtocol = new SdlProtocol(this,config);
 
     }
@@ -73,12 +70,11 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
         }
         if(sdlProtocol != null){
             sdlProtocol.endSession(sessionId, sessionHashId);
-            //FIXME add a shutdown to sdlProtocol.
-            //transportManager.close(sessionId);
         }
     }
 
 
+    @SuppressWarnings("ConstantConditions")
     @Override
     public void startService (SessionType serviceType, byte sessionID, boolean isEncrypted) {
         if (isEncrypted){
@@ -108,6 +104,7 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
     }
 
 
+    @SuppressWarnings("RedundantThrows")
     @Override
     public void startSession() throws SdlException {
         sdlProtocol.start();
@@ -155,22 +152,6 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
         sdlProtocol.sendPacket(packet);
     }
 
-    @Override
-    public void sendHeartbeat(IHeartbeatMonitor monitor) {
-        Log.d(TAG, "Asked to send heartbeat");
-        if (sdlProtocol != null) {
-            //FIXME sdlProtocol.sendHeartBeat(sessionId);
-        }
-    }
-
-    @Override
-    public void heartbeatTimedOut(IHeartbeatMonitor monitor) {
-        close();
-    }
-
-    public void onHeartbeatTimedOut(byte sessionId){
-        //TODO
-    }
 
     public void onProtocolSessionStartedNACKed(SessionType sessionType, byte sessionID, byte version, String correlationID, List<String> rejectedParams){
         onProtocolSessionNACKed(sessionType,sessionID,version,correlationID,rejectedParams);
@@ -183,33 +164,26 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
         if(serviceListeners != null && serviceListeners.containsKey(sessionType)){
             CopyOnWriteArrayList<ISdlServiceListener> listeners = serviceListeners.get(sessionType);
             for(ISdlServiceListener listener:listeners){
-                listener.onServiceError(this, sessionType, "Start "+ sessionType.toString() +" Service NACK'ed");
+                listener.onServiceError(this, sessionType, "Start "+ sessionType.toString() +" Service NAKed");
             }
         }
     }
 
-
-
+    /* Not supported methods from IProtocolListener */
     @Override
-    public void onProtocolHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
+    public void sendHeartbeat(IHeartbeatMonitor monitor) {/* Not supported */ }
     @Override
-    public void onProtocolHeartbeatACK(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
-
+    public void heartbeatTimedOut(IHeartbeatMonitor monitor) {/* Not supported */}
     @Override
-    public void onResetOutgoingHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
-
+    public void onHeartbeatTimedOut(byte sessionId){ /* Not supported */}
     @Override
-    public void onResetIncomingHeartbeat(SessionType sessionType, byte sessionID) {
-        //TODO
-    }
+    public void onProtocolHeartbeat(SessionType sessionType, byte sessionID) { /* Not supported */}
+    @Override
+    public void onProtocolHeartbeatACK(SessionType sessionType, byte sessionID) {/* Not supported */}
+    @Override
+    public void onResetOutgoingHeartbeat(SessionType sessionType, byte sessionID) {/* Not supported */}
+    @Override
+    public void onResetIncomingHeartbeat(SessionType sessionType, byte sessionID) {/* Not supported */}
 
     /* ***********************************************************************************************************************************************************************
      * *****************************************************************  Security Listener  *********************************************************************************
@@ -237,21 +211,6 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
         }
     }
 
-    @Deprecated
-    public void clearConnection(){
-        //TODO reset SdlProtocol
-    }
-
-    @Deprecated
-    public static boolean removeConnection(SdlConnection connection){
-        return false;
-    }
-
-    @Deprecated
-    @Override
-    public void checkForOpenMultiplexConnection(SdlConnection connection){
-    }
-
     @Override
     public void stopStream(SessionType serviceType) {
         if(SessionType.NAV.equals(serviceType)){
@@ -261,5 +220,18 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
         }
 
     }
+
+    @Override
+    @Deprecated
+    public void clearConnection(){/* Not supported */}
+
+    @SuppressWarnings("SameReturnValue")
+    @Deprecated
+    public static boolean removeConnection(SdlConnection connection){/* Not supported */ return false;}
+
+    @Deprecated
+    @Override
+    public void checkForOpenMultiplexConnection(SdlConnection connection){/* Not supported */}
+
 
 }

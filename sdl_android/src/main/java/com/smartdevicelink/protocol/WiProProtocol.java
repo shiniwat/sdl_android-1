@@ -27,8 +27,10 @@ import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
 
-
-
+/**
+ * @see SdlProtocol
+ */
+@Deprecated
 public class WiProProtocol extends AbstractProtocol {
 	private static final String TAG ="SdlProtocol";
 	private final static String FailurePropagating_Msg = "Failure propagating ";
@@ -62,6 +64,7 @@ public class WiProProtocol extends AbstractProtocol {
 	private WiProProtocol() {
 		super(null);
 	} // end-ctor
+
 
 	public WiProProtocol(IProtocolListener protocolListener) {
 		super(protocolListener);

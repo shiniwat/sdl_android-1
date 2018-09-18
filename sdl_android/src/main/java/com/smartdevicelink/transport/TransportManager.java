@@ -20,10 +20,9 @@ import com.smartdevicelink.util.AndroidTools;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
+@SuppressWarnings("unused")
 public class TransportManager {
     private static final String TAG = "TransportManager";
 
@@ -31,7 +30,6 @@ public class TransportManager {
 
     TransportBrokerThread _brokerThread;
     TransportBrokerImpl transport;
-    //final HashMap<TransportType, Boolean> transportStatus;
     final List<TransportRecord> transportStatus;
     final TransportEventListener transportListener;
     final WeakReference<Context> contextWeakReference;
@@ -54,10 +52,6 @@ public class TransportManager {
         this.TRANSPORT_STATUS_LOCK = new Object();
         synchronized (TRANSPORT_STATUS_LOCK){
             this.transportStatus = new ArrayList<>();
-           // this.transportStatus = new HashMap<>();
-           // this.transportStatus.put(TransportType.BLUETOOTH, false);
-           // this.transportStatus.put(TransportType.USB, false);
-           // this.transportStatus.put(TransportType.TCP, false);
         }
 
         if(config.service == null) {
@@ -79,7 +73,6 @@ public class TransportManager {
             transport = _brokerThread.getBroker();
         }else{
             enterLegacyMode("Router service is not trusted. Entering legacy mode");
-            //throw new SecurityException("Unable to trust router service");
         }
     }
 
@@ -106,7 +99,9 @@ public class TransportManager {
      * @param transportType the transport to have its connection status returned. If `null` is
      *                      passed in, all transports will be checked and if any are connected a
      *                      true value will be returned.
-     * @return
+     * @param address the address associated with the transport type. If null, the first transport
+     *                of supplied type will be used to return if connected.
+     * @return if a transport is connected based on included variables
      */
     public boolean isConnected(TransportType transportType, String address){
         synchronized (TRANSPORT_STATUS_LOCK) {
@@ -126,6 +121,33 @@ public class TransportManager {
                 }
             }
             return false;
+        }
+    }
+    /**
+     * Retrieve a transport record with the supplied params
+     * @param transportType the transport to have its connection status returned.
+     * @param address the address associated with the transport type. If null, the first transport
+     *                of supplied type will be returned.
+     * @return the transport record for the transport type and address if supplied
+     */
+    public TransportRecord getTransportRecord(TransportType transportType, String address){
+        synchronized (TRANSPORT_STATUS_LOCK) {
+            if (transportType == null) {
+                return null;
+            }
+            for (TransportRecord record : transportStatus) {
+                if (record.getType().equals(transportType)) {
+                    if (address != null) {
+                        if (address.equals(record.getAddress())) {
+                            return record;
+                        } // Address doesn't match, move forward
+                    } else {
+                        //If no address is included, assume any transport of correct type is acceptable
+                        return record;
+                    }
+                }
+            }
+            return null;
         }
     }
 
@@ -169,20 +191,21 @@ public class TransportManager {
     	transport.requestSecondaryTransportConnection(sessionId, params);
     }
 
-    private class TransportBrokerImpl extends TransportBroker{
+    protected class TransportBrokerImpl extends TransportBroker{
 
         public TransportBrokerImpl(Context context, String appId, ComponentName routerService){
             super(context,appId,routerService);
         }
 
+        @SuppressWarnings("deprecation")
         @Override
+        @Deprecated
         public boolean onHardwareConnected(TransportType transportType){
             return false;
         }
 
         @Override
         public boolean onHardwareConnected(List<TransportRecord> transports) {
-            Log.d(TAG, "onHardwareConnected - " +transports.size());
             super.onHardwareConnected(transports);
             synchronized (TRANSPORT_STATUS_LOCK){
                 transportStatus.clear();
@@ -201,10 +224,6 @@ public class TransportManager {
                 Log.d(TAG, "Transport disconnected");
 
             }
-//            if(connectedTransports == null || connectedTransports.isEmpty()){
-//                //There are no more transports to use so we can unbind
-//                super.onHardwareDisconnected(record,connectedTransports);
-//            }
 
             synchronized (TRANSPORT_STATUS_LOCK){
                 TransportManager.this.transportStatus.remove(record);
@@ -212,6 +231,7 @@ public class TransportManager {
             }
 
             if(isLegacyModeEnabled()
+                    && record != null
                     && TransportType.BLUETOOTH.equals(record.getType()) //Make sure it's bluetooth that has be d/c
                     && legacyBluetoothTransport == null){ //Make sure we aren't already in legacy mode
                 //Legacy mode has been enabled so we need to cycle
@@ -317,7 +337,7 @@ public class TransportManager {
         }
     }
 
-    private synchronized void exitLegacyMode(String info ){
+    protected synchronized void exitLegacyMode(String info ){
         if(legacyBluetoothTransport != null){
             legacyBluetoothTransport.stop();
             legacyBluetoothTransport = null;
@@ -344,7 +364,7 @@ public class TransportManager {
         /**
          * Called when the transport manager has determined it needs to move towards a legacy style
          * transport connection. It will always be bluetooth.
-         * @param info
+         * @param info simple info string about the situation
          * @return if the listener is ok with entering legacy mode
          */
         boolean onLegacyModeEnabled(String info);
@@ -352,12 +372,12 @@ public class TransportManager {
 
 
 
-    private static class LegacyBluetoothHandler extends Handler{
+    protected static class LegacyBluetoothHandler extends Handler{
 
         final WeakReference<TransportManager> provider;
 
         public LegacyBluetoothHandler(TransportManager provider){
-            this.provider = new WeakReference<TransportManager>(provider);
+            this.provider = new WeakReference<>(provider);
         }
         @Override
         public void handleMessage(Message msg) {
