@@ -701,7 +701,6 @@ public class TransportBroker {
 		}
 
 		public void requestNewSession(TransportRecord transportRecord){
-			Log.d(TAG, "requestNewSession: " + transportRecord.getType().name());
 			Message msg = Message.obtain();
 			msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
 			msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
@@ -711,6 +710,7 @@ public class TransportBroker {
 			}
 			bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
 			if(transportRecord != null) {
+				Log.d(TAG, "requestNewSession: " + transportRecord.getType().name());
 				bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
 				bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
 			}
