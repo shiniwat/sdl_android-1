@@ -1,3 +1,35 @@
+/*
+ * Copyright (c) 2018 Livio, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following
+ * disclaimer in the documentation and/or other materials provided with the
+ * distribution.
+ *
+ * Neither the name of the Livio Inc. nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 package com.smartdevicelink.protocol;
 
 import android.os.Bundle;
@@ -300,6 +332,7 @@ public class SdlProtocol {
             //The primary transport being used is no longer part of the connected transports
             //The transport manager callbacks should handle the disconnect code
             connectedPrimaryTransport = null;
+            notifyDevTransportListener();
             return;
         }
 
@@ -312,7 +345,10 @@ public class SdlProtocol {
             }else{
                 onTransportNotAccepted("No transports match requested primary transport");
             }
-            // return;
+            //Return to that the developer does not receive the transport callback at this time
+            // as it is better to wait until the RPC service is registered and secondary transport
+            //information is available
+             return;
         }else if(secondaryTransportListeners != null
                 && transports != null
                 && iSdlProtocol!= null){
@@ -324,6 +360,91 @@ public class SdlProtocol {
                     registerSecondaryTransport(iSdlProtocol.getSessionId(), record);
                 }
             }
+        }
+        //Update the developer that a new transport has become available
+        notifyDevTransportListener();
+    }
+
+
+    /**
+     * Check to see if a transport is available to start/use the supplied service.
+     * @param serviceType the session that should be checked for transport availability
+     * @return true if there is either a supported
+     *         transport currently connected or a transport is
+     *         available to connect with for the supplied service type.
+     *         <br>false if there is no
+     *         transport connected to support the service type in question and
+     *          no possibility in the foreseeable future.
+     */
+    public boolean isTransportForServiceAvailable(@NonNull SessionType serviceType){
+        if(connectedPrimaryTransport == null){
+            //If there is no connected primary then there is no transport available for any service
+            return false;
+        }else if(activeTransports!= null && activeTransports.containsKey(serviceType)){
+            //There is an active transport that this service can be used on
+            //This should catch RPC, Bulk, and Control service types
+            return true;
+        }
+
+        if(transportPriorityForServiceMap != null) {
+            List<Integer> transportPriority = transportPriorityForServiceMap.get(serviceType);
+
+            if (transportPriority != null && !transportPriority.isEmpty()) {
+                if (transportPriority.contains(PRIMARY_TRANSPORT_ID)) {
+                    //If the transport priority for this service type contains primary then
+                    // the service can be used/started
+                    return true;
+                } else if (transportPriority.contains(SECONDARY_TRANSPORT_ID)) {
+                    //This would mean only secondary transport is supported for this service
+                    return isSecondaryTransportAvailable(false);
+                }
+            }
+        }
+
+        //No transport priority for this service type
+        if(connectedPrimaryTransport.getType() == TransportType.USB || connectedPrimaryTransport.getType() == TransportType.TCP){
+            //Since the only service type that should reach this point are ones that require a high
+            //bandwidth, true can be returned if the primary transport is a high bandwidth transport
+            return true;
+        }else{
+            //Since the only service type that should reach this point are ones that require a high
+            //bandwidth, true can be returned if a secondary transport is a high bandwidth transport
+            return isSecondaryTransportAvailable(true);
+        }
+    }
+
+    /**
+     * Checks to see if a secondary transport is available for this session
+     * @param onlyHighBandwidth if only high bandwidth transports should be included in this check
+     * @return true if any connected or potential transport meets the criteria to be a secondary
+     *         transport
+     */
+    private boolean isSecondaryTransportAvailable(boolean onlyHighBandwidth){
+        if (supportedSecondaryTransports != null) {
+            for (TransportType supportedSecondary : supportedSecondaryTransports) {
+                if(!onlyHighBandwidth || supportedSecondary == TransportType.USB || supportedSecondary == TransportType.TCP) {
+                    if (transportManager.isConnected(supportedSecondary, null)) {
+                        //A supported secondary transport is already connected
+                        return true;
+                    } else if (secondaryTransportParams != null && secondaryTransportParams.containsKey(supportedSecondary)) {
+                        //A secondary transport is available to connect to
+                        return true;
+                    }
+                }
+            }
+        }
+        // No supported secondary transports
+        return false;
+    }
+
+
+    /**
+     * If there was a TransportListener attached to the supplied multiplex config, this method will
+     * call the onTransportEvent method.
+     */
+    private void notifyDevTransportListener (){
+        if(transportConfig.getTransportListener() != null && transportManager != null) {
+            transportConfig.getTransportListener().onTransportEvent(transportManager.getConnectedTransports(), isTransportForServiceAvailable(SessionType.PCM),isTransportForServiceAvailable(SessionType.NAV));
         }
     }
 
@@ -657,7 +778,7 @@ public class SdlProtocol {
                 //Check to see if the primary transport can also be used as a backup
                 final boolean primaryTransportBackup = transportPriorityForServiceMap.get(serviceType).contains(PRIMARY_TRANSPORT_ID);
 
-                listenerList.add(new ISecondaryTransportListener() {
+                ISecondaryTransportListener secondaryListener = new ISecondaryTransportListener() {
                     @Override
                     public void onConnectionSuccess(TransportRecord transportRecord) {
                         header.setTransportRecord(transportRecord);
@@ -674,17 +795,22 @@ public class SdlProtocol {
                             Log.d(TAG, "Failed to connect secondary transport, threw away StartService");
                         }
                     }
-                });
+                };
 
                 if(transportManager.isConnected(secondaryTransportType,null)){
                     //The transport is actually connected, however no service has been registered
+                    listenerList.add(secondaryListener);
                     registerSecondaryTransport(sessionID,transportManager.getTransportRecord(secondaryTransportType,null));
-                }else if(secondaryTransportParams.containsKey(secondaryTransportType)) {
+                }else if(secondaryTransportParams != null && secondaryTransportParams.containsKey(secondaryTransportType)) {
                     //No acceptable secondary transport is connected, so first one must be connected
                     header.setTransportRecord(new TransportRecord(secondaryTransportType,""));
+                    listenerList.add(secondaryListener);
                     transportManager.requestSecondaryTransportConnection(sessionID,secondaryTransportParams.get(secondaryTransportType));
                 }else{
                     Log.w(TAG, "No params to connect to secondary transport");
+                    //Unable to register or start a secondary connection. Use the callback in case
+                    //there is a chance to use the primary transport for this service.
+                    secondaryListener.onConnectionFailure();
                 }
 
             }
@@ -887,6 +1013,9 @@ public class SdlProtocol {
                         setTransportPriorityForService(SessionType.PCM, audio);
                         setTransportPriorityForService(SessionType.NAV, video);
 
+                        //Update the developer on the transport status
+                        notifyDevTransportListener();
+
                     } else {
                         Log.w(TAG, "Received a start service ack for RPC service while already active on a different transport.");
                         return;
@@ -906,6 +1035,9 @@ public class SdlProtocol {
                     activeTransports.put(SessionType.CONTROL, transportRecord);
                     activeTransports.put(SessionType.NAV, transportRecord);
                     activeTransports.put(SessionType.PCM, transportRecord);
+
+                    //Inform the developer of the initial transport connection
+                    notifyDevTransportListener();
                 }
 
 
@@ -1050,10 +1182,12 @@ public class SdlProtocol {
             if(getTransportForSession(SessionType.NAV) != null && disconnectedTransport.getType().equals(getTransportForSession(SessionType.NAV).getType())){
                 //stopVideoStream();
                 iSdlProtocol.stopStream(SessionType.NAV);
+                activeTransports.remove(SessionType.NAV);
             }
             if(getTransportForSession(SessionType.PCM) != null && disconnectedTransport.getType().equals(getTransportForSession(SessionType.PCM).getType())){
                 //stopAudioStream();
                 iSdlProtocol.stopStream(SessionType.PCM);
+                activeTransports.remove(SessionType.PCM);
             }
 
             Log.d(TAG, "rpc transport? - " + getTransportForSession(SessionType.RPC));
@@ -1075,10 +1209,15 @@ public class SdlProtocol {
                 transportManager.close(iSdlProtocol.getSessionId());
                 transportManager = null;
                 requestedSession = false;
+                
+                activeTransports.clear();
 
                 iSdlProtocol.onTransportDisconnected(info, primaryTransportAvailable, transportConfig);
 
             } //else Transport was not primary, continuing to stay connected
+
+            //Update the developer since a transport just disconnected
+            notifyDevTransportListener();
 
         }
 
@@ -1281,6 +1420,9 @@ public class SdlProtocol {
                     bundle.putInt(ControlFrameTags.RPC.TransportEventUpdate.TCP_PORT, port);
                     bundle.putString(TransportConstants.TRANSPORT_TYPE, TransportType.TCP.name());
                     secondaryTransportParams.put(TransportType.TCP, bundle);
+
+                    //A new secondary transport just became available. Notify the developer.
+                    notifyDevTransportListener();
                 }
 
             }
