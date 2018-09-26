@@ -161,8 +161,8 @@ public class SdlRouterService extends Service{
     @SuppressWarnings("unused")
 	public static final int MESSAGE_WRITE = 3;
     public static final int MESSAGE_DEVICE_NAME = 4;
-    public static final int MESSAGE_TOAST = 5;
-	
+    public static final int MESSAGE_LOG = 5;
+
     @SuppressWarnings("FieldCanBeLocal")
 	private final int UNREGISTER_APP_INTERFACE_CORRELATION_ID = 65530;
 
@@ -1387,16 +1387,11 @@ public class SdlRouterService extends Service{
     }
 
 	private void exitForeground(){
-		if(isForeground){
-			if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
-				NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-				if(notificationManager!=null){
-					notificationManager.deleteNotificationChannel(TransportConstants.SDL_NOTIFICATION_CHANNEL_ID);
-				}
+		synchronized (NOTIFICATION_LOCK) {
+			if (isForeground && !isPrimaryTransportConnected()) {	//Ensure that the service is in the foreground and no longer connected to a transport
+				this.stopForeground(true);
+				isForeground = false;
 			}
-
-			this.stopForeground(true);
-			isForeground = false;
 		}
 	}
 	
@@ -1428,6 +1423,9 @@ public class SdlRouterService extends Service{
 		return connected;
 	}
 
+	private boolean isPrimaryTransportConnected(){
+		return isTransportConnected(TransportType.BLUETOOTH) || isTransportConnected(TransportType.USB);
+	}
 
 	private boolean isTransportConnected(TransportType transportType){
 		if(bluetoothTransport != null && transportType.equals(TransportType.BLUETOOTH)){

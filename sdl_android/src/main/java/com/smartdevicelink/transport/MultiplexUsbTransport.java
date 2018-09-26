@@ -32,7 +32,6 @@
 
 package com.smartdevicelink.transport;
 
-import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -42,7 +41,6 @@ import android.util.Log;
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
 
-import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -61,10 +59,10 @@ public class MultiplexUsbTransport extends MultiplexBaseTransport{
     public static final String SERIAL           = "serial";
     public static final String DESCRIPTION      = "description";
 
-    final Bundle deviceInfo;
-    ReaderThread readerThread;
-    WriterThread writerThread;
-    final ParcelFileDescriptor parcelFileDescriptor;
+    private final Bundle deviceInfo;
+    private ReaderThread readerThread;
+    private WriterThread writerThread;
+    private final ParcelFileDescriptor parcelFileDescriptor;
 
     MultiplexUsbTransport(ParcelFileDescriptor parcelFileDescriptor, Handler handler, Bundle bundle){
         super(handler, TransportType.USB);
@@ -164,9 +162,9 @@ public class MultiplexUsbTransport extends MultiplexBaseTransport{
      */
     private void connectionFailed() {
         // Send a failure message back to the Activity
-        Message msg = handler.obtainMessage(SdlRouterService.MESSAGE_TOAST);
+        Message msg = handler.obtainMessage(SdlRouterService.MESSAGE_LOG);
         Bundle bundle = new Bundle();
-        bundle.putString(TOAST, "Unable to connect device");
+        bundle.putString(LOG, "Unable to connect device");
         msg.setData(bundle);
         handler.sendMessage(msg);
 
@@ -179,9 +177,9 @@ public class MultiplexUsbTransport extends MultiplexBaseTransport{
      */
     private void connectionLost() {
         // Send a failure message back to the Activity
-        Message msg = handler.obtainMessage(SdlRouterService.MESSAGE_TOAST);
+        Message msg = handler.obtainMessage(SdlRouterService.MESSAGE_LOG);
         Bundle bundle = new Bundle();
-        bundle.putString(TOAST, "Device connection was lost");
+        bundle.putString(LOG, "Device connection was lost");
         msg.setData(bundle);
         handler.sendMessage(msg);
         stop();
