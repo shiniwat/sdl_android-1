@@ -64,7 +64,7 @@ public class TransportManager {
     TransportBrokerImpl transport;
     final List<TransportRecord> transportStatus;
     final TransportEventListener transportListener;
-    final WeakReference<Context> contextWeakReference;
+    //final WeakReference<Context> contextWeakReference;
 
     //Legacy Transport
     MultiplexBluetoothTransport legacyBluetoothTransport;
@@ -90,9 +90,7 @@ public class TransportManager {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
-        Log.d(TAG, "config.service in TransportManager is " + config.service);
-        contextWeakReference = new WeakReference<>(config.context);
-        RouterServiceValidator validator = new RouterServiceValidator(config.context,config.service);
+        RouterServiceValidator validator = new RouterServiceValidator(config);
         if(validator.validate()){
             //transport = new TransportBrokerImpl(config.context, config.appId,config.service);
             ConditionVariable cond = new ConditionVariable();
