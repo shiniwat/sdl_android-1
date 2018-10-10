@@ -256,6 +256,8 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 	protected VideoStreamingManager manager; //Will move to SdlSession once the class becomes public
 
+	private boolean _isAppInterfaceRegistered;
+
 	private static class Log {
 		public static void e(String tag, String msg) {
 			android.util.Log.e(tag, msg);
@@ -563,12 +565,16 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						 incomingHeartbeatMonitor.setInterval(_transportConfig.getHeartBeatTimeout());
 			             sdlSession.setIncomingHeartbeatMonitor(incomingHeartbeatMonitor);
 					 }		
-					 
-					startRPCProtocolSession();
+
+					if (!_isAppInterfaceRegistered) {
+						startRPCProtocolSession();
+					}
 				}
 				else
 				{
-					RPCProtectedServiceStarted();
+					if (!_isAppInterfaceRegistered) {
+						RPCProtectedServiceStarted();
+					}
 				}
 			} else if (sessionType.eq(SessionType.NAV)) {
 				NavServiceStarted();
@@ -2382,6 +2388,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 									((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
 								}
 								onRPCResponseReceived(msg);
+								_isAppInterfaceRegistered = true;
 							}
 						});
 					} else {
@@ -2389,6 +2396,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 							((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
 						}
 						onRPCResponseReceived(msg);
+						_isAppInterfaceRegistered = true;
 					}
 				} else if ((new RPCResponse(hash)).getCorrelationID() == POLICIES_CORRELATION_ID 
 						&& functionName.equals(FunctionID.ON_ENCODED_SYNC_P_DATA.toString())) {
@@ -3749,6 +3757,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 				updateBroadcastIntent(sendIntent, "TYPE", RPCMessage.KEY_NOTIFICATION);
 				updateBroadcastIntent(sendIntent, "DATA",serializeJSON(msg));
 				sendBroadcastIntent(sendIntent);
+				_isAppInterfaceRegistered = false;
 
 				if (_advancedLifecycleManagementEnabled) {
 					// This requires the proxy to be cycled
