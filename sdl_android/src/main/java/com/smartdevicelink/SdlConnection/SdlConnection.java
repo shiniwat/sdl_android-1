@@ -306,6 +306,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	public void endService (SessionType sessionType, byte sessionID) {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
+				Log.d(TAG, "EncProtocolService(" + sessionType.getName() + ", session=" + sessionID);
 				_protocol.EndProtocolService(sessionType, sessionID);
 			}
 		}

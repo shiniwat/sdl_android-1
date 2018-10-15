@@ -35,6 +35,7 @@ package com.smartdevicelink.SdlConnection;
 import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
+import com.smartdevicelink.localdebug.DebugConst;
 import com.smartdevicelink.protocol.ISdlProtocol;
 import com.smartdevicelink.protocol.ProtocolMessage;
 import com.smartdevicelink.protocol.SdlPacket;
@@ -102,6 +103,7 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
             sdlSecurity.shutDown();
         }
         if(sdlProtocol != null){
+            DebugConst.log(TAG, "endSession for sessionId=" + sessionId);
             sdlProtocol.endSession(sessionId, sessionHashId);
         }
     }

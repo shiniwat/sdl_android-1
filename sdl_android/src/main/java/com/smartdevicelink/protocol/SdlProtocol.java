@@ -38,6 +38,7 @@ import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
 import com.smartdevicelink.exception.SdlExceptionCause;
+import com.smartdevicelink.localdebug.DebugConst;
 import com.smartdevicelink.protocol.enums.ControlFrameTags;
 import com.smartdevicelink.protocol.enums.FrameDataControlFrameType;
 import com.smartdevicelink.protocol.enums.FrameType;
@@ -522,6 +523,7 @@ public class SdlProtocol {
             header.putTag(ControlFrameTags.RPC.EndService.HASH_ID, hashId);
         }
 
+        DebugConst.log(TAG, "about endSession for " + sessionID);
         handlePacketToSend(header);
 
     } // end-method

@@ -214,6 +214,8 @@ public class TransportManager {
         }else if(legacyBluetoothTransport != null){
             byte[] data = packet.constructPacket();
             legacyBluetoothTransport.write(data, 0, data.length);
+        } else {
+            Log.e(TAG, "sendPacket: nowhere to send..");
         }
     }
 
