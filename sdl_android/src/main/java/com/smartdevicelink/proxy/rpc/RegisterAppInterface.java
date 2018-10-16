@@ -607,11 +607,11 @@ public class RegisterAppInterface extends RPCRequest {
 	 * @since SmartDeviceLink 2.0
 	 */
 	public void setAppID(@NonNull String appID) {
-		if (appID != null) {
-			setParameters(KEY_APP_ID, appID.toLowerCase());
-		} else {
+		//if (appID != null) {
+		//	setParameters(KEY_APP_ID, appID.toLowerCase());
+		//} else {
 			setParameters(KEY_APP_ID, appID);
-		}
+		//}
 	}
 
 	/**
@@ -653,11 +653,13 @@ public class RegisterAppInterface extends RPCRequest {
 
 	@Override
 	public void format(Version rpcVersion, boolean formatParams) {
+	    /*-- [swatanabe] setting FullAppID here causes compatibility problem and RAI to fail on SDL Core 4.5.
+	    ** Suppress this for the time being.
 		if(rpcVersion == null || rpcVersion.getMajor() >= 5) {
 			if (getFullAppID() == null) {
 				setFullAppID(getAppID());
 			}
-		}
+		}--*/
 		super.format(rpcVersion, formatParams);
 	}
 
