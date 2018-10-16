@@ -6,6 +6,7 @@ import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.proxy.RPCRequest;
 import com.smartdevicelink.proxy.rpc.enums.AppHMIType;
 import com.smartdevicelink.proxy.rpc.enums.Language;
+import com.smartdevicelink.util.Version;
 
 import java.util.Hashtable;
 import java.util.List;
@@ -182,7 +183,14 @@ import java.util.List;
  *                 <td>Maxlength: 100</td>
  * 			<td>SmartDeviceLink 2.0 </td>
  * 		</tr>
- * 
+ * 		<tr>
+ * 			<td>fullAppID</td>
+ * 			<td>String</td>
+ * 			<td>ID used to validate app with policy table entries</td>
+ *                 <td>N</td>
+ *                 <td>Maxlength: 100</td>
+ * 			<td>SmartDeviceLink 5.0</td>
+ * 		</tr>
  * 		<tr>
  * 			<td>hmiCapabilities</td>
  * 			<td>HMICapabilities</td>
@@ -216,7 +224,7 @@ import java.util.List;
  * 			<td>The color scheme that is used for day.</td>
  *                 <td>N</td>
  *                 <td></td>
- * 			<td>SmartDeviceLink 4.6</td>
+ * 			<td>SmartDeviceLink 5.0</td>
  * 		</tr>
  *
  * 		<tr>
@@ -225,7 +233,7 @@ import java.util.List;
  * 			<td>The color scheme that is used for night.</td>
  *                 <td>N</td>
  *                 <td></td>
- * 			<td>SmartDeviceLink 4.6</td>
+ * 			<td>SmartDeviceLink 5.0</td>
  * 		</tr>
  *  </table>
  *  <p></p>
@@ -238,6 +246,7 @@ public class RegisterAppInterface extends RPCRequest {
 	public static final String KEY_HMI_DISPLAY_LANGUAGE_DESIRED = "hmiDisplayLanguageDesired";
 	public static final String KEY_APP_HMI_TYPE = "appHMIType";
 	public static final String KEY_APP_ID = "appID";
+	public static final String KEY_FULL_APP_ID = "fullAppID";
 	public static final String KEY_LANGUAGE_DESIRED = "languageDesired";
 	public static final String KEY_DEVICE_INFO = "deviceInfo";
 	public static final String KEY_APP_NAME = "appName";
@@ -248,6 +257,7 @@ public class RegisterAppInterface extends RPCRequest {
 	public static final String KEY_HASH_ID = "hashID";
 	public static final String KEY_DAY_COLOR_SCHEME = "dayColorScheme";
 	public static final String KEY_NIGHT_COLOR_SCHEME = "nightColorScheme";
+	private static final int APP_ID_MAX_LENGTH = 10;
 
 	/**
 	 * Constructs a new RegisterAppInterface object
@@ -596,16 +606,67 @@ public class RegisterAppInterface extends RPCRequest {
 	 *            <b>Notes: </b>Maxlength = 100
 	 * @since SmartDeviceLink 2.0
 	 */
-    public void setAppID(@NonNull String appID) {
-		setParameters(KEY_APP_ID, appID);
-    }
+	public void setAppID(@NonNull String appID) {
+		if (appID != null) {
+			setParameters(KEY_APP_ID, appID.toLowerCase());
+		} else {
+			setParameters(KEY_APP_ID, appID);
+		}
+	}
+
+	/**
+	 * Gets the unique ID, which an app will be given when approved
+	 *
+	 * @return String - a String value representing the unique ID, which an app
+	 *         will be given when approved
+	 * @since SmartDeviceLink 5.0
+	 */
+	public String getFullAppID() {
+		return getString(KEY_FULL_APP_ID);
+	}
+
+	/**
+	 * Sets a unique ID, which an app will be given when approved <br>
+	 * Note: this will automatically parse the fullAppID into the smaller appId and set the appId value as well
+	 * @param fullAppID
+	 *            a String value representing a unique ID, which an app will be
+	 *            given when approved
+	 *            <p></p>
+	 *            <b>Notes: </b>Maxlength = 100
+	 * @since SmartDeviceLink 5.0
+	 */
+	public void setFullAppID(String fullAppID) {
+		if (fullAppID != null) {
+			fullAppID = fullAppID.toLowerCase();
+			setParameters(KEY_FULL_APP_ID, fullAppID);
+			String appID;
+			if (fullAppID.length() <= APP_ID_MAX_LENGTH) {
+				appID = fullAppID;
+			} else {
+				appID = fullAppID.replace("-", "").substring(0, APP_ID_MAX_LENGTH);
+			}
+			setAppID(appID);
+		} else {
+			setParameters(KEY_FULL_APP_ID, null);
+		}
+	}
+
+	@Override
+	public void format(Version rpcVersion, boolean formatParams) {
+		if(rpcVersion == null || rpcVersion.getMajor() >= 5) {
+			if (getFullAppID() == null) {
+				setFullAppID(getAppID());
+			}
+		}
+		super.format(rpcVersion, formatParams);
+	}
 
 	/**
 	 * Gets the color scheme that is currently used for day
 	 *
 	 * @return TemplateColorScheme - a TemplateColorScheme object representing the colors that are used
 	 * for day color scheme
-	 * @since SmartDeviceLink 4.6
+	 * @since SmartDeviceLink 5.0
 	 */
     public TemplateColorScheme getDayColorScheme(){
 		return (TemplateColorScheme) getObject(TemplateColorScheme.class, KEY_DAY_COLOR_SCHEME);
@@ -616,7 +677,7 @@ public class RegisterAppInterface extends RPCRequest {
 	 *
 	 * @param templateColorScheme a TemplateColorScheme object representing the colors that will be
 	 * used for day color scheme
-	 * @since SmartDeviceLink 4.6
+	 * @since SmartDeviceLink 5.0
 	 */
     public void setDayColorScheme(TemplateColorScheme templateColorScheme){
 		setParameters(KEY_DAY_COLOR_SCHEME, templateColorScheme);
@@ -627,7 +688,7 @@ public class RegisterAppInterface extends RPCRequest {
 	 *
 	 * @return TemplateColorScheme - a TemplateColorScheme object representing the colors that are used
 	 * for night color scheme
-	 * @since SmartDeviceLink 4.6
+	 * @since SmartDeviceLink 5.0
 	 */
 	public TemplateColorScheme getNightColorScheme(){
 		return (TemplateColorScheme) getObject(TemplateColorScheme.class, KEY_NIGHT_COLOR_SCHEME);
@@ -638,7 +699,7 @@ public class RegisterAppInterface extends RPCRequest {
 	 *
 	 * @param templateColorScheme a TemplateColorScheme object representing the colors that will be
 	 * used for night color scheme
-	 * @since SmartDeviceLink 4.6
+	 * @since SmartDeviceLink 5.0
 	 */
 	public void setNightColorScheme(TemplateColorScheme templateColorScheme){
 		setParameters(KEY_NIGHT_COLOR_SCHEME, templateColorScheme);
