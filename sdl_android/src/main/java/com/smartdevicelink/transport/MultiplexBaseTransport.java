@@ -55,7 +55,9 @@ public abstract class MultiplexBaseTransport {
     protected final TransportType transportType;
 
     protected TransportRecord transportRecord;
+    @Deprecated
     public static String currentlyConnectedDevice = null;
+    protected String connectedDeviceName = null;
     public String connectedDeviceAddress = null;
 
 
@@ -83,7 +85,7 @@ public abstract class MultiplexBaseTransport {
 
     // WORK AROUND for reverting SdlRouterService (to get around some connectivity issue)
     public String getDeviceName() {
-        return currentlyConnectedDevice;
+        return connectedDeviceName;
     }
 
     /**

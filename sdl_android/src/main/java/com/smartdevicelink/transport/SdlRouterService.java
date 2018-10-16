@@ -135,7 +135,7 @@ public class SdlRouterService extends Service{
 	/**
 	 * <b> NOTE: DO NOT MODIFY THIS UNLESS YOU KNOW WHAT YOU'RE DOING.</b>
 	 */
-	protected static final int ROUTER_SERVICE_VERSION_NUMBER = 7;
+	protected static final int ROUTER_SERVICE_VERSION_NUMBER = 8;
 
 	
 	private static final String ROUTER_SERVICE_PROCESS = "com.smartdevicelink.router";
@@ -187,7 +187,6 @@ public class SdlRouterService extends Service{
 
 	private static boolean connectAsClient = false;
 	private static boolean closing = false;
-	private boolean isTransportConnected = false;
 
     private Handler  altTransportTimerHandler, foregroundTimeoutHandler;
     private Runnable  altTransportTimerRunnable, foregroundTimeoutRunnable;
@@ -200,12 +199,12 @@ public class SdlRouterService extends Service{
 	private SparseArray<String> bluetoothSessionMap, usbSessionMap, tcpSessionMap;
 	private SparseIntArray sessionHashIdMap;
 	private SparseIntArray cleanedSessionMap;
-	private final Object SESSION_LOCK = new Object(), REGISTERED_APPS_LOCK = new Object(), PING_COUNT_LOCK = new Object(), NOTIFICATION_LOCK = new Object();
+	private final Object SESSION_LOCK = new Object(), REGISTERED_APPS_LOCK = new Object(),
+				PING_COUNT_LOCK = new Object(), NOTIFICATION_LOCK = new Object();
 	
 	private static Messenger altTransportService = null;
 	
-	private String  connectedDeviceName = "";			//The name of the connected Device
-	private boolean startSequenceComplete = false;	
+	private boolean startSequenceComplete = false;
 	
 	private ExecutorService packetExecutor = null;
 	HashMap<TransportType, PacketWriteTaskMaster>  packetWriteTaskMasterMap = null;
@@ -421,7 +420,7 @@ public class SdlRouterService extends Service{
 
 	            		returnBundle = new Bundle();
 	            		//Add params if connected
-	            		if(service.isTransportConnected){
+	            		if(service.isPrimaryTransportConnected()){
                             ArrayList<TransportRecord> records = service.getConnectedTransports();
 							if (!records.isEmpty()) {
 								returnBundle.putString(TransportConstants.HARDWARE_CONNECTED, records.get(records.size() - 1).getType().name());
@@ -755,14 +754,14 @@ public class SdlRouterService extends Service{
 	        		if(msg.replyTo!=null){
 	        			Message message = Message.obtain();
 	        			message.what = TransportConstants.ROUTER_STATUS_CONNECTED_STATE_RESPONSE;
-	        			message.arg1 = (service.isTransportConnected) ? 1 : 0;
+	        			message.arg1 = (service.isPrimaryTransportConnected()) ? 1 : 0;
 	        			try {
 	        				msg.replyTo.send(message);
 	        			} catch (RemoteException e) {
 	        				e.printStackTrace();
 	        			}
 	        		}
-	        		if(service.isTransportConnected && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
+	        		if(service.isPrimaryTransportConnected() && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
 	        			if(service.pingIntent == null){
 	        				service.initPingIntent();
 	        			}
@@ -818,7 +817,7 @@ public class SdlRouterService extends Service{
 	        				e.printStackTrace();
 	        			}
 	        		}
-	        		if(service.isTransportConnected && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
+	        		if(service.isPrimaryTransportConnected() && ((TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING  & flags) == TransportConstants.ROUTER_STATUS_FLAG_TRIGGER_PING)){
 	        			if(service.pingIntent == null){
 	        				service.initPingIntent();
 	        			}
@@ -1028,6 +1027,11 @@ public class SdlRouterService extends Service{
 	@Override
 	public void onCreate() {
 		super.onCreate();
+		//This must be done regardless of if this service shuts down or not
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			enterForeground("Waiting for connection...", FOREGROUND_TIMEOUT/1000, false);
+			resetForegroundTimeOut(FOREGROUND_TIMEOUT/1000);
+		}
 
 		if(!initCheck()){ // Run checks on process and permissions
 			deployNextRouterService();
@@ -1132,16 +1136,20 @@ public class SdlRouterService extends Service{
 		}
 		if(intent != null ){
 			if(intent.getBooleanExtra(FOREGROUND_EXTRA, false)){
-				String address = null;
-				if(intent.hasExtra(BluetoothDevice.EXTRA_DEVICE)){
-					BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-					if(device != null){
-						address = device.getAddress();
+				if (this.isPrimaryTransportConnected()) { //If there is no transport connected we need to ensure the service is moved to the foreground
+					String address = null;
+					if (intent.hasExtra(BluetoothDevice.EXTRA_DEVICE)) {
+						BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+						if (device != null) {
+							address = device.getAddress();
+						}
 					}
+					int timeout = getNotificationTimeout(address);
+					enterForeground("Waiting for connection...", timeout, false);
+					resetForegroundTimeOut(timeout);
+				} else {
+					enterForeground(createConnectedNotificationText(), 0, true);
 				}
-				int timeout = getNotificationTimeout(address);
-				enterForeground("Waiting for connection...", timeout, false);
-				resetForegroundTimeOut(timeout);
 			}
 			if(intent.hasExtra(TransportConstants.PING_ROUTER_SERVICE_EXTRA)){
 				//Make sure we are listening on RFCOMM
@@ -1269,28 +1277,31 @@ public class SdlRouterService extends Service{
 		if(android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.HONEYCOMB_MR2){
 			return;
 		}
-		if(foregroundTimeoutHandler == null){
-			foregroundTimeoutHandler = new Handler();
+		synchronized (NOTIFICATION_LOCK) {
+			if (foregroundTimeoutHandler == null) {
+				foregroundTimeoutHandler = new Handler();
+			}
+			if (foregroundTimeoutRunnable == null) {
+				foregroundTimeoutRunnable = new Runnable() {
+					@Override
+					public void run() {
+						exitForeground();
+					}
+				};
+			} else {
+				//This instance likely means there is a callback in the queue so we should remove it
+				foregroundTimeoutHandler.removeCallbacks(foregroundTimeoutRunnable);
+			}
+			foregroundTimeoutHandler.postDelayed(foregroundTimeoutRunnable, delay);
 		}
-		if(foregroundTimeoutRunnable == null) {
-			foregroundTimeoutRunnable = new Runnable() {
-				@Override
-				public void run() {
-					exitForeground();
-				}
-			};
-		}else{
-			//This instance likely means there is a callback in the queue so we should remove it
-			foregroundTimeoutHandler.removeCallbacks(foregroundTimeoutRunnable);
-		}
-		foregroundTimeoutHandler.postDelayed(foregroundTimeoutRunnable,delay);
 	}
 
 	public void cancelForegroundTimeOut(){
-		if(foregroundTimeoutHandler != null && foregroundTimeoutRunnable != null){
-			foregroundTimeoutHandler.removeCallbacks(foregroundTimeoutRunnable);
+		synchronized (NOTIFICATION_LOCK) {
+			if (foregroundTimeoutHandler != null && foregroundTimeoutRunnable != null) {
+				foregroundTimeoutHandler.removeCallbacks(foregroundTimeoutRunnable);
+			}
 		}
-
 	}
 
 	@SuppressLint("NewApi")
@@ -1313,7 +1324,12 @@ public class SdlRouterService extends Service{
 		}
        // Bitmap icon = BitmapFactory.decodeByteArray(SdlLogo.SDL_LOGO_STRING, 0, SdlLogo.SDL_LOGO_STRING.length);
 
-        Notification.Builder builder = new Notification.Builder(this);
+		Notification.Builder builder;
+		if(android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.O){
+			builder = new Notification.Builder(this);
+		} else {
+			builder = new Notification.Builder(this, SDL_NOTIFICATION_CHANNEL_ID);
+		}
         if(0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)){ //If we are in debug mode, include what app has the router service open
         	ComponentName name = new ComponentName(this, this.getClass());
         	builder.setContentTitle("SDL: " + name.getPackageName());
@@ -1395,7 +1411,37 @@ public class SdlRouterService extends Service{
 		}
 	}
 	
-	
+	/**
+	 * Creates a notification message to attach to the foreground service notification.
+ 	 *
+ 	 * @return string to be used as the message
+ 	*/
+	private String createConnectedNotificationText(){
+		StringBuilder builder = new StringBuilder();
+		builder.append("Connected to ");
+
+		if(bluetoothTransport!= null && bluetoothTransport.isConnected()){
+			if(bluetoothTransport.getDeviceName() != null){
+				builder.append(bluetoothTransport.getDeviceName());
+				if(0 == (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)) {
+					//If this is production, just the device name is fine
+					return builder.toString();
+				}
+			}else{
+				builder.append(TransportType.BLUETOOTH.name().toLowerCase());
+			}
+		}
+
+		if(usbTransport != null && usbTransport.isConnected()){
+			if(builder.length() > 13){ //13 characters for initial Connected to string
+				builder.append(" & ");
+			}
+			builder.append(TransportType.USB.name());
+		}
+
+		return builder.toString();
+	}
+
 	/* **************************************************************************************************************************************
 	***********************************************  Helper Methods **************************************************************
 	****************************************************************************************************************************************/
@@ -1403,7 +1449,7 @@ public class SdlRouterService extends Service{
 	@SuppressWarnings("SameReturnValue")
 	@Deprecated
 	public  String getConnectedDeviceName(){
-		return connectedDeviceName;
+		return null;
 	}
 
 	private ArrayList<TransportRecord> getConnectedTransports(){
@@ -1524,9 +1570,8 @@ public class SdlRouterService extends Service{
 	}
 
 	public void onTransportConnected(final TransportRecord record){
-		isTransportConnected = true;
 		cancelForegroundTimeOut();
-		enterForeground("Connected to " + this.getConnectedDeviceName(),0,true);
+		enterForeground(createConnectedNotificationText(),0,true);
 
 		if(packetWriteTaskMasterMap == null){
 			packetWriteTaskMasterMap = new HashMap<>();
@@ -1724,7 +1769,6 @@ public class SdlRouterService extends Service{
 	            	case MESSAGE_DEVICE_NAME:
 						Bundle bundle = msg.getData();
 						if(bundle !=null) {
-							service.connectedDeviceName = bundle.getString(MultiplexBaseTransport.DEVICE_NAME);
 							service.setSDLConnectedStatus(bundle.getString(MultiplexBaseTransport.DEVICE_ADDRESS),true);
 						}
 	            		break;
@@ -2566,7 +2610,7 @@ public class SdlRouterService extends Service{
 	
 	private void startClientPings(){
 		synchronized(this){
-			if(!isTransportConnected){ //If we aren't connected, bail
+			if(!isPrimaryTransportConnected()){ //If we aren't connected, bail
 				return;
 			}
 		if(isPingingClients){

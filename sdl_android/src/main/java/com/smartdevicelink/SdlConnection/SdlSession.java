@@ -302,6 +302,14 @@ public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorList
             mAudioPacketizer.stop();
             return true;
         }
+        // we have to EndService too
+        if (serviceListeners != null) {
+            CopyOnWriteArrayList<ISdlServiceListener> listeners = serviceListeners.get(SessionType.PCM);
+            for (ISdlServiceListener listener : listeners) {
+                listener.onServiceEnded(this, SessionType.PCM);
+            }
+        }
+
         return false;
     }
 
@@ -311,9 +319,11 @@ public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorList
         {
             mVideoPacketizer.stop();
             // we have to EndService too
-            CopyOnWriteArrayList<ISdlServiceListener> listeners = serviceListeners.get(SessionType.NAV);
-            for(ISdlServiceListener listener:listeners){
-                listener.onServiceEnded(this, SessionType.NAV);
+            if (serviceListeners != null) {
+                CopyOnWriteArrayList<ISdlServiceListener> listeners = serviceListeners.get(SessionType.NAV);
+                for (ISdlServiceListener listener : listeners) {
+                    listener.onServiceEnded(this, SessionType.NAV);
+                }
             }
 
             return true;

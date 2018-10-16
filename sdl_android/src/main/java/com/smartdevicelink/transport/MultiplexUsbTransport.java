@@ -72,7 +72,7 @@ public class MultiplexUsbTransport extends MultiplexBaseTransport{
             throw new ExceptionInInitializerError("ParcelFileDescriptor can't be null");
         }else{
             this.parcelFileDescriptor = parcelFileDescriptor;
-            currentlyConnectedDevice = "USB";
+            connectedDeviceName = "USB";
             deviceInfo = bundle;
             if(deviceInfo != null){
                 //Fill in info
@@ -106,7 +106,7 @@ public class MultiplexUsbTransport extends MultiplexBaseTransport{
         // Send the name of the connected device back to the UI Activity
         Message msg = handler.obtainMessage(SdlRouterService.MESSAGE_DEVICE_NAME);
         Bundle bundle = new Bundle();
-        bundle.putString(DEVICE_NAME, currentlyConnectedDevice);
+        bundle.putString(DEVICE_NAME, connectedDeviceName);
         bundle.putString(DEVICE_ADDRESS, connectedDeviceAddress);
         msg.setData(bundle);
         handler.sendMessage(msg);

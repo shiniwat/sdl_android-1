@@ -809,9 +809,12 @@ public class SdlProtocol {
             SdlPacket header = SdlPacketFactory.createEndSession(serviceType, sessionID, hashID, (byte)protocolVersion.getMajor(), new byte[0]);
             TransportRecord transportRecord = activeTransports.get(serviceType);
             if(transportRecord != null){
+                Log.d(TAG, "endService for service=" + serviceType + "; transportRecord is " + transportRecord);
                 header.setTransportRecord(transportRecord);
                 handlePacketToSend(header);
+                /*--- the following HACK is no longer needed
             }else{
+                Log.d(TAG, "endService for service=" + serviceType + "; transportRecord is null");
                 // the sessionID mapping does not seem to work for older Core.
                 Collection<TransportRecord> records = activeTransports.values();
                 boolean containsUsb = false;
@@ -827,7 +830,7 @@ public class SdlProtocol {
                     handlePacketToSend(header);
                 } else {
                     Log.w(TAG, "Not sending end session packet because there is no session on that transport");
-                }
+                } ---*/
             }
         }
     }
@@ -908,6 +911,7 @@ public class SdlProtocol {
             messageLock = new Object();
             _messageLocks.put((byte)packet.getSessionId(), messageLock);
         }
+        Log.d(TAG, "handleProtocolSessionStarted packet.version=" + packet.version);
         if(packet.version >= 5){
             String mtuTag = null;
             if(serviceType.equals(SessionType.RPC)){
@@ -940,7 +944,7 @@ public class SdlProtocol {
                     return;
                 }
 
-
+                Log.d(TAG, "handleProtocolSessionStarted protocolVersion=" + protocolVersion + "; activeTransports=" + activeTransports.toString());
                 // This enables custom behavior based on protocol version specifics
                 if (protocolVersion.isNewerThan(new Version("5.1.0")) >= 0) {
 
