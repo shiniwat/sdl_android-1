@@ -147,17 +147,17 @@ public class RouterServiceValidator {
 					return false;
 				}
 			}else{
-				/*--- [swatanabe] seems to be removed from OSS...
+				//*--- [swatanabe] seems to be removed from OSS, but without this code, we cannot find RouterService on Android O+
 				List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(this.context, new SdlAppInfo.BestRouterComparator());
 				if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
 					SdlAppInfo info = sdlAppInfoList.get(0);
 					this.service = info.getRouterServiceComponentName();
-				} --*/
-				//if (this.service == null) {
+				} // removed from OSS --*/
+				if (this.service == null) {
 					Log.e(TAG, "Router service not found on Android O+; returning false");
 					wakeUpRouterServices();
 					return false;
-				//}
+				}
 			}
 
 		}
