@@ -633,9 +633,15 @@ public class TransportBroker {
             Intent bindingIntent = new Intent();
             bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
             //Quickly make sure it's just up and running
-            getContext().startService(bindingIntent);
-            bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_CLIENT);
-            return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
+            // On Android O+, startServie may cause IllegalStateException. Get around for now
+            try {
+                getContext().startService(bindingIntent);
+                bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_CLIENT);
+                return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
+            } catch(IllegalStateException e) {
+                e.printStackTrace();
+                return false;
+            }
         } else {
             return false;
         }
