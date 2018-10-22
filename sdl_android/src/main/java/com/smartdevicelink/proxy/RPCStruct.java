@@ -104,7 +104,7 @@ public class RPCStruct {
 			}
 
 			if (parameters != null) {
-				for (Object value : parameters.values()) {
+				for(Object value:parameters.values()){
 					internalFormat(rpcVersion, value);
 				}
 			}
