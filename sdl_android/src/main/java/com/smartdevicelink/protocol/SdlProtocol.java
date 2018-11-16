@@ -1043,12 +1043,16 @@ public class SdlProtocol {
                 }
             }
         } else {
+            Log.d(TAG, "handleProtocolSessionStarted: packet version=" + packet.version);
+            // Even if packet version is 4 or lower, we should still make protocolsession to work.
             TransportRecord transportRecord = packet.getTransportRecord();
             if(transportRecord == null || (requiresHighBandwidth
                     && TransportType.BLUETOOTH.equals(transportRecord.getType()))){
                 //transport can't support high bandwidth
-                onTransportNotAccepted((transportRecord != null ? transportRecord.getType().toString() : "Transport") + "can't support high bandwidth requirement, and secondary transport not supported in this protocol version");
-                return;
+                //onTransportNotAccepted((transportRecord != null ? transportRecord.getType().toString() : "Transport") + "can't support high bandwidth requirement, and secondary transport not supported in this protocol version");
+                //return;
+                // assuming we'are on BT, in this case.
+                transportRecord = new TransportRecord(TransportType.BLUETOOTH, "");
             }
             //If version < 5 and transport is acceptable we need to just add these
             activeTransports.put(SessionType.RPC, transportRecord);
