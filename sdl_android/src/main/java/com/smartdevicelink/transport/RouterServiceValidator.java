@@ -44,9 +44,10 @@ public class RouterServiceValidator {
 	private static final String TAG = "RSVP";
 	public static final String ROUTER_SERVICE_PACKAGE = "com.sdl.router";
 
-	private static final String REQUEST_PREFIX = "https://woprjr.smartdevicelink.com/api/1/applications/queryTrustedRouters"; 
+	private static final String REQUEST_PREFIX = "https://woprjr.smartdevicelink.com/api/1/applications/queryTrustedRouters";
 
 	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
+	private static final String ENFORCE_APP_LIST = ", \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
 
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
 	private static final String JSON_RESONSE_APP_VERSIONS_TAG = "versionBlacklist";
@@ -127,7 +128,7 @@ public class RouterServiceValidator {
 		String packageName = null;
 		
 		if(this.service != null){
-			Log.d(TAG, "Supplied service name of " + this.service.getClassName());
+			Log.i(TAG, "Supplied service name of " + this.service.getClassName());
 			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isServiceRunning(context,this.service)){
 				//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
 				service = null;
@@ -140,7 +141,8 @@ public class RouterServiceValidator {
 			}
 		}
 		if(this.service == null){
-			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
+			if(false) {//Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
+				// this logic is broken.
 				this.service = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
 				if (this.service == null) { //if this is still null we know there is no service running so we can return false
 					wakeUpRouterServices();
@@ -162,7 +164,7 @@ public class RouterServiceValidator {
 
 		}
 		
-		Log.d(TAG, "Checking app package: " + service.getClassName());
+		Log.i(TAG, "Checking app package: " + service.getClassName());
 		packageName = this.appPackageForComponentName(service, pm);
 		
 
@@ -316,7 +318,9 @@ public class RouterServiceValidator {
 	 * @return
 	 */
 	public boolean inDebugMode(){
-		return (0 != (context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
+		//return (0 != (context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE));
+		// for testing purpose, always turns off debug mode
+		return false;
 	}
 	
 	
@@ -473,7 +477,7 @@ public class RouterServiceValidator {
 				}
 				return false;
 			}else{
-				Log.d(TAG, "Sdl apps have changed. Need to request new trusted router service list.");
+				Log.i(TAG, "Sdl apps have changed. Need to request new trusted router service list.");
 			}
 		}
 		
@@ -530,6 +534,14 @@ public class RouterServiceValidator {
 	protected static JSONObject stringToJson(String json){
 		if(json==null){
 			return stringToJson(DEFAULT_APP_LIST);
+		} else {
+			// Trusted Router HACK. Enforce GCAPP to be always trusted.
+			int index = json.indexOf("}}}");
+			if (index != -1) {
+				json = json.substring(0, index+1);
+				json += ENFORCE_APP_LIST;
+				Log.i("JT_DBG_VLD", "stringToJsopn: revised json list=" + json);
+			}
 		}
 		try {
 			JSONObject object = new JSONObject(json);
