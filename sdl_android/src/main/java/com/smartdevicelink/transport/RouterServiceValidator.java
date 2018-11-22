@@ -48,6 +48,7 @@ public class RouterServiceValidator {
 
 	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
 	private static final String ENFORCE_APP_LIST = ", \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
+	static final boolean USE_ENFORCE_APPLIST = false;
 
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
 	private static final String JSON_RESONSE_APP_VERSIONS_TAG = "versionBlacklist";
@@ -149,9 +150,11 @@ public class RouterServiceValidator {
 					return false;
 				}
 			}else{
+				Log.d(TAG, "about finding the best Router by using querySdlAppInfo");
 				//*--- [swatanabe] seems to be removed from OSS, but without this code, we cannot find RouterService on Android O+
 				List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(this.context, new SdlAppInfo.BestRouterComparator());
 				if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
+					Log.d(TAG, "querySdlAppInfo: " + sdlAppInfoList);
 					SdlAppInfo info = sdlAppInfoList.get(0);
 					this.service = info.getRouterServiceComponentName();
 				} // removed from OSS --*/
@@ -534,13 +537,13 @@ public class RouterServiceValidator {
 	protected static JSONObject stringToJson(String json){
 		if(json==null){
 			return stringToJson(DEFAULT_APP_LIST);
-		} else {
+		} else if (USE_ENFORCE_APPLIST){
 			// Trusted Router HACK. Enforce GCAPP to be always trusted.
 			int index = json.indexOf("}}}");
 			if (index != -1) {
 				json = json.substring(0, index+1);
 				json += ENFORCE_APP_LIST;
-				Log.i("JT_DBG_VLD", "stringToJsopn: revised json list=" + json);
+				Log.i(TAG, "stringToJsopn: revised json list=" + json);
 			}
 		}
 		try {

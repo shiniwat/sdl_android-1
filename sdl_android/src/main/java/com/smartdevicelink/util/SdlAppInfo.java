@@ -140,12 +140,12 @@ public class SdlAppInfo {
                 if(two != null){
                     if(one.isCustomRouterService){
                         if(two.isCustomRouterService){
-                            return 0;
+                            // should move to version check if both are custom router.
                         }else{
-                            return 1;
+                            return -1;
                         }
                     }else if(two.isCustomRouterService){
-                        return -1;
+                        return 1;
 
                     }//else, do nothing. Move to version check
 
