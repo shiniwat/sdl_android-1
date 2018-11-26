@@ -673,6 +673,7 @@ public class TransportBroker {
     private boolean sendBindingIntent() {
         if (this.routerPackage != null && this.routerClassName != null) {
             Log.d(TAG, "Sending bind request to " + this.routerPackage + " - " + this.routerClassName);
+            DebugConst.connectRouter(this.routerPackage + ":" + this.routerClassName);
             Intent bindingIntent = new Intent();
             bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
             //Quickly make sure it's just up and running

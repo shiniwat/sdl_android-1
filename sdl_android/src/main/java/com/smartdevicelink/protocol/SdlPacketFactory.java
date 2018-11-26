@@ -1,10 +1,14 @@
 package com.smartdevicelink.protocol;
 
+import android.util.Log;
+
+import com.smartdevicelink.localdebug.DebugConst;
 import com.smartdevicelink.protocol.enums.FrameDataControlFrameType;
 import com.smartdevicelink.protocol.enums.SessionType;
 
 public class SdlPacketFactory {
 
+	private final static String TAG = "SdlPacketFactory";
 	/* 
 	 * public SdlPacket(int version, boolean compression, int frameType,
 			int serviceType, int frameInfo, int sessionId,
@@ -48,6 +52,9 @@ public class SdlPacketFactory {
 	}
 
 	public static SdlPacket createEndSession(SessionType serviceType, byte sessionID, int messageID, byte version, byte[] payload) {
+		DebugConst.log(TAG, "createEndSession sessionType=" + serviceType.getName() + "; sessionID=" + sessionID);
+		//Throwable t = new Throwable(); // this is debugging only (to see the callstack)
+		//t.printStackTrace();
 		return new SdlPacket(version,false,SdlPacket.FRAME_TYPE_CONTROL,
 				serviceType.getValue(),SdlPacket.FRAME_INFO_END_SERVICE,sessionID,
 				payload.length,messageID,payload);

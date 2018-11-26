@@ -305,8 +305,10 @@ public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorList
         // we have to EndService too
         if (serviceListeners != null) {
             CopyOnWriteArrayList<ISdlServiceListener> listeners = serviceListeners.get(SessionType.PCM);
-            for (ISdlServiceListener listener : listeners) {
-                listener.onServiceEnded(this, SessionType.PCM);
+            if (listeners != null) {
+                for (ISdlServiceListener listener : listeners) {
+                    listener.onServiceEnded(this, SessionType.PCM);
+                }
             }
         }
 
