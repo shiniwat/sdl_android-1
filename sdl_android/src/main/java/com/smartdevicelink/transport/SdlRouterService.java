@@ -2184,7 +2184,7 @@ public class SdlRouterService extends Service{
 								hashId = this.sessionHashIdMap.get(sessionId);
 							}
 						}
-						SdlPacket endPacket = getEndSessionPacketForVersion(sessionId, hashId, , 0, version);
+						SdlPacket endPacket = getEndSessionPacketForVersion(sessionId, hashId,0, version);
 						stopService = endPacket.constructPacket();
 
 						manuallyWriteBytes(transportTypes.get(0),stopService, 0, stopService.length);
