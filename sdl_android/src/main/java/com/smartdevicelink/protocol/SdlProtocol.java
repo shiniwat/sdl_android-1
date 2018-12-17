@@ -515,18 +515,21 @@ public class SdlProtocol {
     }
 
     public void endSession(byte sessionID, int hashId) {
-        SdlPacket header;
-        if(protocolVersion.getMajor() < 5){
-            header = SdlPacketFactory.createEndSession(SessionType.RPC, sessionID, hashId, (byte)protocolVersion.getMajor(), BitConverter.intToByteArray(hashId));
-        }else{
-            header = SdlPacketFactory.createEndSession(SessionType.RPC, sessionID, hashId, (byte)protocolVersion.getMajor(), new byte[0]);
-            header.putTag(ControlFrameTags.RPC.EndService.HASH_ID, hashId);
-        }
-
+        SdlPacket header = getEndSessionPacket(SessionType.RPC, sessionID, hashId);
         DebugConst.log(TAG, "about endSession for " + sessionID);
         handlePacketToSend(header);
-
     } // end-method
+
+    private SdlPacket getEndSessionPacket(SessionType sessionType, byte sessionID, int hashId) {
+        SdlPacket header;
+        if(protocolVersion.getMajor() < 5){
+            header = SdlPacketFactory.createEndSession(sessionType, sessionID, hashId, (byte)protocolVersion.getMajor(), BitConverter.intToByteArray(hashId));
+        }else{
+            header = SdlPacketFactory.createEndSession(sessionType, sessionID, hashId, (byte)protocolVersion.getMajor(), new byte[0]);
+            header.putTag(ControlFrameTags.RPC.EndService.HASH_ID, hashId);
+        }
+        return header;
+    }
 
     public void sendPacket(SdlPacket packet){
         if(transportManager != null){
@@ -589,6 +592,7 @@ public class SdlProtocol {
         // Get the message lock for this protocol session
         Object messageLock = _messageLocks.get(sessionID);
         if (messageLock == null) {
+            Log.e(TAG, "sendMessage: protocolMessage=" + protocolMsg.toString());
             handleProtocolError("Error sending protocol message to SDL.",
                     new SdlException("Attempt to send protocol message prior to startSession ACK.", SdlExceptionCause.SDL_UNAVAILABLE));
             return;
@@ -806,31 +810,14 @@ public class SdlProtocol {
         if(serviceType.equals(SessionType.RPC)){ //RPC session will close all other sessions so we want to make sure we use the correct EndProtocolSession method
             endSession(sessionID,hashID);
         }else {
-            SdlPacket header = SdlPacketFactory.createEndSession(serviceType, sessionID, hashID, (byte)protocolVersion.getMajor(), new byte[0]);
-            TransportRecord transportRecord = activeTransports.get(serviceType);
-            if(transportRecord != null){
-                Log.d(TAG, "endService for service=" + serviceType + "; transportRecord is " + transportRecord);
-                header.setTransportRecord(transportRecord);
-                handlePacketToSend(header);
-                /*--- the following HACK is no longer needed
-            }else{
-                Log.d(TAG, "endService for service=" + serviceType + "; transportRecord is null");
-                // the sessionID mapping does not seem to work for older Core.
-                Collection<TransportRecord> records = activeTransports.values();
-                boolean containsUsb = false;
-                for (TransportRecord current: records) {
-                    if (current.getType().equals(TransportType.USB)) {
-                        containsUsb = true;
-                        break;
-                    }
-                }
-                if ((serviceType.equals(SessionType.NAV) || serviceType.equals(SessionType.PCM)) && containsUsb) {
-                    Log.d(TAG, "activeTransports =" + activeTransports.values() + " Let's try endSession");
-                    header.setTransportRecord(new TransportRecord(TransportType.USB, null));
+            SdlPacket header = getEndSessionPacket(serviceType, sessionID, hashID);
+            if (header != null) {
+                TransportRecord transportRecord = activeTransports.get(serviceType);
+                if (transportRecord != null) {
+                    Log.d(TAG, "endService for service=" + serviceType + "; transportRecord is " + transportRecord);
+                    header.setTransportRecord(transportRecord);
                     handlePacketToSend(header);
-                } else {
-                    Log.w(TAG, "Not sending end session packet because there is no session on that transport");
-                } ---*/
+                }
             }
         }
     }

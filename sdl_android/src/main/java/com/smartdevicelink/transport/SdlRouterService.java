@@ -1941,6 +1941,17 @@ public class SdlRouterService extends Service{
 			}
 			return false;		
 		}
+
+		private SdlPacket getEndSessionPacketForVersion(int sessionId, int hashId, int messageId, int version) {
+			SdlPacket packet;
+			if (version < 5) {
+				packet = SdlPacketFactory.createEndSession(SessionType.RPC, (byte)sessionId, messageId, (byte)version, BitConverter.intToByteArray(hashId));
+			} else {
+				packet = SdlPacketFactory.createEndSession(SessionType.RPC, (byte)sessionId, messageId, (byte)version, new byte[0]);
+				packet.putTag(ControlFrameTags.RPC.EndService.HASH_ID, hashId);
+			}
+			return packet;
+		}
 		/**
 		 * This will send the received packet to the registered service. It will default to the single registered "foreground" app.
 		 * This can be overridden to provide more specific functionality. 
@@ -1992,7 +2003,7 @@ public class SdlRouterService extends Service{
 							}
 
 							//TODO stop other services on that transport for the session with no app
-							SdlPacket endService = SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)packet.getVersion(),BitConverter.intToByteArray(hashId));
+							SdlPacket endService = getEndSessionPacketForVersion(session, hashId, 0, packet.getVersion());
 							byte[] stopService = endService.constructPacket();
 							manuallyWriteBytes(packet.getTransportRecord().getType(), stopService,0,stopService.length);
 						}else{
@@ -2004,14 +2015,25 @@ public class SdlRouterService extends Service{
 
 	    			//There is an app id and can continue to normal flow
 	    			byte version = (byte)packet.getVersion();
-	    			
-	    			if(isNewSessionRequest && version > 1 && packet.getFrameInfo() == SdlPacket.FRAME_INFO_START_SERVICE_ACK){ //we know this was a start session response
-	    				if (packet.getPayload() != null && packet.getDataSize() == 4){ //hashid will be 4 bytes in length
-	    					synchronized(SESSION_LOCK){
-	    						this.sessionHashIdMap.put(session, (BitConverter.intFromByteArray(packet.getPayload(), 0)));
-	    					}
-	    				}
-	    			}
+
+					if(isNewSessionRequest && packet.getFrameInfo() == SdlPacket.FRAME_INFO_START_SERVICE_ACK){ //we know this was a start session response
+						if (version >= 5) {
+							Integer hashId = (Integer) packet.getTag(ControlFrameTags.RPC.StartServiceACK.HASH_ID);
+							if (hashId != null) {
+								synchronized(SESSION_LOCK) {
+									this.sessionHashIdMap.put(session, hashId.intValue());
+								}
+							} else {
+								Log.w(TAG, "Hash ID not found in V5 start service ACK frame for session " + session);
+							}
+						} else if (version > 1) {
+							if (packet.getPayload() != null && packet.getDataSize() == 4){ //hashid will be 4 bytes in length
+								synchronized(SESSION_LOCK){
+									this.sessionHashIdMap.put(session, (BitConverter.intFromByteArray(packet.getPayload(), 0)));
+								}
+							}
+						}
+					}
 
 				// check and prevent a UAI from being passed to an app that is using a recycled session id
 				if (cleanedSessionMap != null && cleanedSessionMap.size() > 0 ) {
@@ -2135,7 +2157,8 @@ public class SdlRouterService extends Service{
 					this.cleanedSessionMap.put(session,hashId);
 				}
 			}
-			byte[] stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte)session, 0, (byte)version,BitConverter.intToByteArray(hashId))).constructPacket();
+			SdlPacket endService = getEndSessionPacketForVersion(session, hashId, 0, version);
+			byte[] stopService = endService.constructPacket();
 			manuallyWriteBytes(primaryTransport,stopService,0,stopService.length);
 		}
 		
@@ -2161,7 +2184,8 @@ public class SdlRouterService extends Service{
 								hashId = this.sessionHashIdMap.get(sessionId);
 							}
 						}
-						stopService = (SdlPacketFactory.createEndSession(SessionType.RPC, (byte) sessionId, 0, version, BitConverter.intToByteArray(hashId))).constructPacket();
+						SdlPacket endPacket = getEndSessionPacketForVersion(sessionId, hashId, , 0, version);
+						stopService = endPacket.constructPacket();
 
 						manuallyWriteBytes(transportTypes.get(0),stopService, 0, stopService.length);
 						synchronized (SESSION_LOCK) {

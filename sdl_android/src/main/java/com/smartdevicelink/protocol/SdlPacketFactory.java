@@ -52,7 +52,7 @@ public class SdlPacketFactory {
 	}
 
 	public static SdlPacket createEndSession(SessionType serviceType, byte sessionID, int messageID, byte version, byte[] payload) {
-		DebugConst.log(TAG, "createEndSession sessionType=" + serviceType.getName() + "; sessionID=" + sessionID);
+		DebugConst.log(TAG, "createEndSession sessionType=" + serviceType.getName() + "; sessionID=" + sessionID + "; version=" + version + "; payload=" + payload);
 		//Throwable t = new Throwable(); // this is debugging only (to see the callstack)
 		//t.printStackTrace();
 		return new SdlPacket(version,false,SdlPacket.FRAME_TYPE_CONTROL,

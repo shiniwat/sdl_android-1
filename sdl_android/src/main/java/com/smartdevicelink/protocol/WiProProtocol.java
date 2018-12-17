@@ -672,7 +672,13 @@ public class WiProProtocol extends AbstractProtocol {
 		if(serviceType.equals(SessionType.RPC)){ //RPC session will close all other sessions so we want to make sure we use the correct EndProtocolSession method
 			EndProtocolSession(serviceType,sessionID,hashID);
 		}else {
-			SdlPacket header = SdlPacketFactory.createEndSession(serviceType, sessionID, hashID, getMajorVersionByte(), new byte[0]);
+			SdlPacket header;
+			if (getMajorVersionByte() < 5) {
+				header = SdlPacketFactory.createEndSession(serviceType, sessionID, hashID, getMajorVersionByte(), BitConverter.intToByteArray(hashID));
+			} else {
+				header = SdlPacketFactory.createEndSession(serviceType, sessionID, hashID, getMajorVersionByte(), new byte[0]);
+				header.putTag(ControlFrameTags.RPC.EndService.HASH_ID, hashID);
+			}
 			handlePacketToSend(header);
 		}
 	}
