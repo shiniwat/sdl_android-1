@@ -22,7 +22,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.os.ConditionVariable;
 import android.support.annotation.NonNull;
 import android.util.Log;
 
@@ -142,29 +144,13 @@ public class RouterServiceValidator {
 			}
 		}
 		if(this.service == null){
-			if(false) {//Build.VERSION.SDK_INT < Build.VERSION_CODES.O ) {
-				// this logic is broken.
-				this.service = componentNameForServiceRunning(pm); //Change this to an array if multiple services are started?
-				if (this.service == null) { //if this is still null we know there is no service running so we can return false
-					wakeUpRouterServices();
-					return false;
-				}
-			}else{
-				Log.d(TAG, "about finding the best Router by using querySdlAppInfo");
-				//*--- [swatanabe] seems to be removed from OSS, but without this code, we cannot find RouterService on Android O+
-				List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(this.context, new SdlAppInfo.BestRouterComparator());
-				if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
-					Log.d(TAG, "querySdlAppInfo: " + sdlAppInfoList);
-					SdlAppInfo info = sdlAppInfoList.get(0);
-					this.service = info.getRouterServiceComponentName();
-				} // removed from OSS --*/
-				if (this.service == null) {
-					Log.e(TAG, "Router service not found on Android O+; returning false");
-					wakeUpRouterServices();
-					return false;
-				}
+			Log.d(TAG, "about finding the best Router by using querySdlAppInfo");
+			retrieveBestRouterServiceName(this.context);
+			// we are retrieving; do not spin up local Router.
+			if (this.service == null) {
+				Log.d(TAG, "We're retrieving the best router; return false at this time, but next time, we'll get the best service");
+				return false;
 			}
-
 		}
 		
 		Log.i(TAG, "Checking app package: " + service.getClassName());
@@ -184,6 +170,122 @@ public class RouterServiceValidator {
 		return false;
 	}
 
+	/**
+	 * This method retrieves the best routerservice name asynchronously.
+	 * @param context
+	 */
+	private void retrieveBestRouterServiceName(Context context) {
+		ConditionVariable cond = new ConditionVariable();
+		FindRouterTask task = new FindRouterTask(cond);
+		task.execute(context);
+		cond.block(500); // this blocks the main thread up to timeout.
+		Log.d(TAG, "retrieveBestRouterServiceName return service=" + this.service);
+	}
+
+	class FindRouterTask extends AsyncTask<Context, Void, ComponentName> {
+		final ConditionVariable condVar;
+		ServiceNameLoader serviceNameLoader = null;
+
+		FindRouterTask(ConditionVariable cond) {
+			condVar = cond;
+		}
+
+		@Override
+		protected ComponentName doInBackground(final Context... contexts) {
+			serviceNameLoader = new ServiceNameLoader(contexts[0]);
+			if (serviceNameLoader.isValid()) {
+				RouterServiceValidator.this.service = serviceNameLoader.getServiceName();
+				condVar.open();
+				return serviceNameLoader.getServiceName();
+			}
+
+			List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(contexts[0], new SdlAppInfo.BestRouterComparator());
+			if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
+				for (SdlAppInfo info: sdlAppInfoList) {
+					if (serviceNameLoader.isValid()) {
+						break; // we found it already
+					}
+					ComponentName name = info.getRouterServiceComponentName();
+					final SdlRouterStatusProvider provider = new SdlRouterStatusProvider(contexts[0], name, new SdlRouterStatusProvider.ConnectedStatusCallback() {
+						@Override
+						public void onConnectionStatusUpdate(boolean connected, ComponentName service, Context context) {
+							if (connected) {
+								Log.d(TAG, "We found the connected service (" + service + "); currentThread is " + Thread.currentThread().getName());
+								serviceNameLoader.setServiceName(service);
+								serviceNameLoader.save(contexts[0]);
+								//condVar.open(); //this is main thread, so do not change conditional variable here.
+							} else {
+								Log.d(TAG, "SdlRouterStatusProvider returns service=" + service + "; connected=" + connected);
+							}
+						}
+					});
+					provider.checkIsConnected();
+					provider.cancel();
+				}
+			}
+			if (!serviceNameLoader.isValid()) {
+				Log.d(TAG, "cannot find the connected service... fallback");
+				RouterServiceValidator.this.service = sdlAppInfoList.get(0).getRouterServiceComponentName();
+			} else {
+				Log.d(TAG, "foundService=" + serviceNameLoader.getServiceName());
+				RouterServiceValidator.this.service = serviceNameLoader.getServiceName();
+			}
+			condVar.open();
+			return RouterServiceValidator.this.service;
+		}
+
+		@Override
+		protected void onPostExecute(ComponentName componentName) {
+			Log.d(TAG, "onPostExecute componentName=" + componentName);
+			super.onPostExecute(componentName);
+		}
+
+		class ServiceNameLoader {
+			static final String prefName = "RouterServiceValidator.FindRouterTask";
+			static final String packageKey = "packageName";
+			static final String classKey = "className";
+			static final String tsKey = "timestamp";
+			final int _validSpan = 60;
+			ComponentName _serviceName;
+			long _timeStamp;
+
+			public ServiceNameLoader(String packageName, String className, long timeStamp) {
+				_serviceName = new ComponentName(packageName, className);
+				_timeStamp = timeStamp;
+			}
+			public ServiceNameLoader(Context context) {
+				SharedPreferences pref = context.getSharedPreferences(prefName, Context.MODE_PRIVATE);
+				String packageName = pref.getString(packageKey, "");
+				String className = pref.getString(classKey, "");
+				_serviceName = new ComponentName(packageName, className);
+				_timeStamp = pref.getLong(tsKey, 0);
+			}
+
+			public ComponentName getServiceName() {
+				return _serviceName;
+			}
+			public void setServiceName(ComponentName name) {
+				_serviceName = name;
+			}
+			public long getTimeStamp() {
+				return _timeStamp;
+			}
+
+			public void save(Context context) {
+				SharedPreferences pref = context.getSharedPreferences(prefName, Context.MODE_PRIVATE);
+				SharedPreferences.Editor editor = pref.edit();
+				editor.putString(packageKey, _serviceName.getPackageName());
+				editor.putString(classKey, _serviceName.getClassName());
+				_timeStamp = System.currentTimeMillis() / 1000;
+				editor.putLong(tsKey, _timeStamp);
+				editor.apply();
+			}
+
+			public boolean isValid() {
+				return (_timeStamp != 0 && System.currentTimeMillis() / 1000 - _timeStamp < _validSpan);
+			}
+		}
+	}
 	/**
 	 * This will ensure that all router services are aware that there are no valid router services running and should start up 
 	 */
