@@ -50,7 +50,7 @@ public class RouterServiceValidator {
 
 	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
 	private static final String ENFORCE_APP_LIST = ", \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
-	static final boolean USE_ENFORCE_APPLIST = false;
+	static final boolean USE_ENFORCE_APPLIST = true;
 
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
 	private static final String JSON_RESONSE_APP_VERSIONS_TAG = "versionBlacklist";
