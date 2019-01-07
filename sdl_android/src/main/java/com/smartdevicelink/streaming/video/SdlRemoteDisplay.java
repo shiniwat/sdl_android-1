@@ -45,6 +45,8 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 
+import com.smartdevicelink.localdebug.DebugConst;
+
 import java.lang.reflect.Constructor;
 import java.util.concurrent.Callable;
 
@@ -58,7 +60,7 @@ import java.util.concurrent.Callable;
 @TargetApi(17)
 public abstract class SdlRemoteDisplay extends Presentation {
     private static final String TAG = "SdlRemoteDisplay";
-    private static final int REFRESH_RATE_MS = 50;
+    private static int REFRESH_RATE_MS = 50;
 
     protected Window w;
     protected View mainView;
@@ -73,6 +75,7 @@ public abstract class SdlRemoteDisplay extends Presentation {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
+        REFRESH_RATE_MS = 1000 / DebugConst.REFRESH_RATE;
         super.onCreate(savedInstanceState);
         setTitle(TAG);
 
