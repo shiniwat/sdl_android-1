@@ -479,7 +479,7 @@ public class RouterServiceValidator {
 			return true;
 		}
 
-		// ignore NameNotFoundException, nad version ius static.
+		// ignore NameNotFoundException, and version would be static.
 		int version = 1;
 		try {version = pm.getPackageInfo(packageName,0).versionCode;} catch (NameNotFoundException e1) {}
 
