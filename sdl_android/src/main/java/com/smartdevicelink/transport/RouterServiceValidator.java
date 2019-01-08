@@ -48,8 +48,8 @@ public class RouterServiceValidator {
 
 	private static final String REQUEST_PREFIX = "https://woprjr.smartdevicelink.com/api/1/applications/queryTrustedRouters";
 
-	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
-	private static final String ENFORCE_APP_LIST = ", \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] } }}";
+	private static final String DEFAULT_APP_LIST = "{\"response\": {\"com.livio.sdl\" : { \"versionBlacklist\":[] }, \"com.lexus.tcapp\" : { \"versionBlacklist\":[] }, \"com.toyota.tcapp\" : { \"versionBlacklist\": [] } , \"com.sdl.router\":{\"versionBlacklist\": [] },\"com.ford.fordpass\" : { \"versionBlacklist\":[] }, \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] }, \"cn.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"cn.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jsuz.capp\" : { \"versionBlacklist\":[] }, \"jp.co.daihatsu.dconnect\" : { \"versionBlacklist\":[] }, \"app.mytoyota.toyota.com.mytoyota\" : { \"versionBlacklist\":[] }, \"app.mylexus.lexus.com.mylexus\" : { \"versionBlacklist\":[] }, \"au.com.toyota.mytoyota.app\" : { \"versionBlacklist\":[] }, \"au.com.lexus.mylexus.app\" : { \"versionBlacklist\":[] } }}";
+	private static final String ENFORCE_APP_LIST = ", \"com.xevo.cts.gcapp.dev\" : { \"versionBlacklist\":[] }, \"com.xevo.capp.dev\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"jp.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jdai.capp\" : { \"versionBlacklist\":[] }, \"cn.co.toyota.sdl.capp.toyota\" : { \"versionBlacklist\":[] }, \"cn.co.toyota.sdl.capp.lexus\" : { \"versionBlacklist\":[] }, \"com.xevokk.jsuz.capp\" : { \"versionBlacklist\":[] }, \"jp.co.daihatsu.dconnect\" : { \"versionBlacklist\":[] }, \"app.mytoyota.toyota.com.mytoyota\" : { \"versionBlacklist\":[] }, \"app.mylexus.lexus.com.mylexuss\" : { \"versionBlacklist\":[] }, \"au.com.toyota.mytoyota.app\" : { \"versionBlacklist\":[] }, \"au.com.lexus.mylexus.app\" : { \"versionBlacklist\":[] } }}";
 	static final boolean USE_ENFORCE_APPLIST = true;
 
 	private static final String JSON_RESPONSE_OBJECT_TAG = "response";
@@ -463,7 +463,49 @@ public class RouterServiceValidator {
 		
 		return false;
 	}
-	
+
+	/**
+	 * This is solely used for unit test.
+	 * @param packageName
+	 * @param pm
+	 * @return
+	 */
+	public boolean isTrustedPackageForTest(String packageName, PackageManager pm) {
+		if(packageName == null){
+			return false;
+		}
+
+		if(shouldOverridePackageName()){ //If we don't care about package names, just return true;
+			return true;
+		}
+
+		// ignore NameNotFoundException, nad version ius static.
+		int version = 1;
+		try {version = pm.getPackageInfo(packageName,0).versionCode;} catch (NameNotFoundException e1) {}
+
+		JSONObject trustedApps = stringToJson(getTrustedList(context));
+		JSONArray versions;
+		JSONObject app = null;
+
+		try {
+			app = trustedApps.getJSONObject(packageName);
+		} catch (JSONException e) {
+			e.printStackTrace();
+			return false;
+		}
+
+		if(app!=null){
+			//At this point, an app object was found in the JSON list that matches the package name
+			if(shouldOverrideVersionCheck()){ //If we don't care about versions, just return true
+				return true;
+			}
+			try { versions = app.getJSONArray(JSON_RESONSE_APP_VERSIONS_TAG); } catch (JSONException e) {	e.printStackTrace();return false;}
+			return verifyVersion(version, versions);
+		}
+
+		return false;
+	}
+
 	protected boolean verifyVersion(int version, JSONArray versions){
 		if(version<0){
 			return false;
