@@ -46,6 +46,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -451,10 +453,12 @@ public class SdlRouterService extends Service{
 	                		appIdToUnregister = "" + receivedBundle.getLong(TransportConstants.APP_ID_EXTRA, -1);
 	                	}
 	                	Log.i(TAG, "Unregistering client: " + appIdToUnregister);
-	                	RegisteredApp unregisteredApp;
-	                	synchronized(service.REGISTERED_APPS_LOCK){
-	                		unregisteredApp = registeredApps.remove(appIdToUnregister);
-	                	}
+	                	RegisteredApp unregisteredApp = null;
+	                	if(registeredApps != null) {
+							synchronized (service.REGISTERED_APPS_LOCK) {
+								unregisteredApp = registeredApps.remove(appIdToUnregister);
+							}
+						}
 	                	Message response = Message.obtain();
 	                	response.what = TransportConstants.ROUTER_UNREGISTER_CLIENT_RESPONSE;
 	                	if(unregisteredApp == null){
@@ -1150,6 +1154,85 @@ public class SdlRouterService extends Service{
 		startSequenceComplete= true;
 	}
 
+	private static Timer checkTimer = null;
+	private final int CHECK_CONNECTED_SERVICE_MAX_DURATION_MS = 30000; // 30 seconds.
+	private long startTimeOfTimer = 0;
+
+	private void checkIfConnectedServiceExists() {
+		// We use the timer here, so that we can do the actual task periodically, and do not execute the actual task too much.
+		if (checkTimer != null) {
+			checkTimer.cancel();
+			checkTimer = null;
+		}
+		if (startTimeOfTimer == 0) {
+			startTimeOfTimer = System.currentTimeMillis();
+		} else {
+			if (System.currentTimeMillis() - startTimeOfTimer > CHECK_CONNECTED_SERVICE_MAX_DURATION_MS) {
+				// we're exceeding. just return
+				Log.w("CheckServices", "checkIfConnectedServiceExists: we are exceeding MAX_DURATION; and reset the startTime.");
+				startTimeOfTimer = 0;
+				return;
+			}
+		}
+		checkTimer = new Timer();
+		checkTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				checkIfConnectedServiceExistsInternal();
+			}
+		}, 5000);
+	}
+	// internal version
+	private void checkIfConnectedServiceExistsInternal() {
+		// always cancel the timer first.
+		if (checkTimer != null) {
+			checkTimer.cancel();
+			checkTimer = null;
+		}
+		if (isPrimaryTransportConnected()) {
+			Log.d("CheckServices", "About canceling the timer because we have Transports connected");
+			startTimeOfTimer = 0;
+			return; // we have the connection by ourselves.
+		}
+		List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(getApplicationContext(), new SdlAppInfo.BestRouterComparator());
+		if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
+			final ComponentName myName = new ComponentName(this, this.getClass());
+			for (SdlAppInfo info: sdlAppInfoList) {
+				ComponentName name = info.getRouterServiceComponentName();
+				if (!name.equals(myName)) {
+					final SdlRouterStatusProvider provider = new SdlRouterStatusProvider(getApplicationContext(), name, new SdlRouterStatusProvider.ConnectedStatusCallback() {
+						@Override
+						public void onConnectionStatusUpdate(boolean connected, ComponentName service, Context context) {
+							if (connected && !service.equals(myName)) {
+								Log.e("CheckServices", "We found other connected service (" + service + ") exists. About killing myself. registeredApps=" + registeredApps);
+								// If there's other RouterService that already has connection, we'll close ourselves.
+								new Handler(getMainLooper()).postDelayed(new Runnable() {
+									@Override
+									public void run() {
+										// in case closeSelf causes ActivityManager to restore the process (which happens if some SDL apps actually bind this Router),
+										// We should NOT closeSelf here
+										if (registeredApps != null && !registeredApps.isEmpty()) {
+											stopSelf();
+											cleanup();
+										} else {
+											Log.e("CheckService", "kill the RouterService process because we have no registeredApps");
+											closeSelf();
+										}
+										startTimeOfTimer = 0;
+									}
+								}, 500);
+							} else {
+								Log.d("CheckServices", "SdlRouterStatusProvider returns service=" + service + "; connected=" + connected);
+							}
+						}
+					});
+					provider.checkIsConnected();
+					provider.cancel();
+				}
+			}
+		}
+
+	}
 
 	@SuppressLint({"NewApi", "MissingPermission"})
 	@Override
@@ -1196,6 +1279,19 @@ public class SdlRouterService extends Service{
 	@SuppressWarnings("ConstantConditions")
 	@Override
 	public void onDestroy(){
+		cleanup();
+
+		super.onDestroy();
+		System.gc(); //Lower end phones need this hint
+		if(!wrongProcess){
+			//noinspection EmptyCatchBlock
+			try{
+				android.os.Process.killProcess(android.os.Process.myPid());
+			}catch(Exception e){}
+		}
+	}
+
+	private void cleanup() {
 		stopClientPings();
 
 		if(altTransportTimerHandler!=null){
@@ -1204,7 +1300,7 @@ public class SdlRouterService extends Service{
 		}
 
 		Log.w(TAG, "Sdl Router Service Destroyed");
-	    closing = true;
+		closing = true;
 		//No need for this Broadcast Receiver anymore
 		unregisterAllReceivers();
 		closeBluetoothSerialServer();
@@ -1224,15 +1320,15 @@ public class SdlRouterService extends Service{
 				this.sessionHashIdMap = null;
 			}
 		}
-		
+
 		//SESSION_LOCK = null;
-		
+
 		startSequenceComplete=false;
 		if(packetExecutor !=null){
 			packetExecutor.shutdownNow();
 			packetExecutor = null;
 		}
-		
+
 		exitForeground();
 		if(packetWriteTaskMasterMap != null && packetWriteTaskMasterMap.values() != null) {
 			Collection<PacketWriteTaskMaster> tasks = packetWriteTaskMasterMap.values();
@@ -1247,17 +1343,8 @@ public class SdlRouterService extends Service{
 		}
 		packetWriteTaskMasterMap = null;
 
-		
-		super.onDestroy();
-		System.gc(); //Lower end phones need this hint
-		if(!wrongProcess){
-			//noinspection EmptyCatchBlock
-			try{
-				android.os.Process.killProcess(android.os.Process.myPid());
-			}catch(Exception e){}
-		}
 	}
-	
+
 	private void unregisterAllReceivers(){
 		//noinspection EmptyCatchBlock
 		try{
@@ -1553,7 +1640,8 @@ public class SdlRouterService extends Service{
 
 			return connectedTransports != null && connectedTransports.size() > 0; //If a transport is connected the list will be >0
 		}else{
-			Log.d(TAG, "Service to remain open");
+			Log.d(TAG, "Let's check if other connected RouterService exists");
+			checkIfConnectedServiceExists();
 			return true;
 		}
 	}

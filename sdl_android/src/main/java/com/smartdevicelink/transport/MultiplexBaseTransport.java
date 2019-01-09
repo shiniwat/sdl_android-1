@@ -107,7 +107,7 @@ public abstract class MultiplexBaseTransport {
 
     public boolean isConnected()
     {
-        return !(mState == STATE_NONE);
+        return mState == STATE_CONNECTED;
     }
 
     public synchronized void stop() {
