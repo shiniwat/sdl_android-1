@@ -138,14 +138,16 @@ public class SdlAppInfo {
         public int compare(SdlAppInfo one, SdlAppInfo two) {
             if(one != null){
                 if(two != null){
+                    // custom router service is very low order.
                     if(one.isCustomRouterService){
                         if(two.isCustomRouterService){
                             // should move to version check if both are custom router.
+                            return 0;
                         }else{
-                            return -1;
+                            return 1;
                         }
                     }else if(two.isCustomRouterService){
-                        return 1;
+                        return -1;
 
                     }//else, do nothing. Move to version check
 

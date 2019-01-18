@@ -162,7 +162,9 @@ public class MultiplexBluetoothTransport extends MultiplexBaseTransport{
         		&& mAdapter != null
         		&&  mAdapter.isEnabled()) {
         	//Log.d(TAG, "Secure thread was null, attempting to create new");
-        	setAcceptThread(new AcceptThread(true));
+            if (getAcceptThread() == null) {
+                setAcceptThread(new AcceptThread(true));
+            }
             if(getAcceptThread()!=null){
             	setState(STATE_LISTEN);
             	 getAcceptThread().start();
@@ -364,7 +366,7 @@ public class MultiplexBluetoothTransport extends MultiplexBaseTransport{
             	// Create a new listening server socket
             	try {
                 	if (secure) {
-                		tmp = mAdapter.listenUsingRfcommWithServiceRecord(NAME_SECURE, SERVER_UUID);
+                	    tmp = mAdapter.listenUsingRfcommWithServiceRecord(NAME_SECURE, SERVER_UUID);
                 	}
             	} catch (IOException e) {
                 	//Log.e(TAG, "Socket Type: " + mSocketType + "listen() failed", e);

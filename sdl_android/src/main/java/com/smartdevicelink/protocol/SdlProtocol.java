@@ -1210,7 +1210,7 @@ public class SdlProtocol {
         @Override
         public boolean onLegacyModeEnabled(String info) {
             //Await a connection from the legacy transport
-            if(requestedPrimaryTransports!= null && requestedPrimaryTransports.contains(TransportType.BLUETOOTH)
+            if(transportConfig.getLegacyModeAllowed() && requestedPrimaryTransports!= null && requestedPrimaryTransports.contains(TransportType.BLUETOOTH)
                     && !transportConfig.requiresHighBandwidth()){
                 Log.d(TAG, "Entering legacy mode; creating new protocol instance");
                 reset();
