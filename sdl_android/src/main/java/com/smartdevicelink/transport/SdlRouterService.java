@@ -1814,8 +1814,12 @@ public class SdlRouterService extends Service{
 
 		//We've notified our clients, less clean up the mess now.
 		synchronized(SESSION_LOCK){
-			this.bluetoothSessionMap.clear();
-			this.sessionHashIdMap.clear();
+			if (bluetoothSessionMap != null) {
+				this.bluetoothSessionMap.clear();
+			}
+			if (sessionHashIdMap != null) {
+				this.sessionHashIdMap.clear();
+			}
 		}
 		synchronized(REGISTERED_APPS_LOCK){
 			if(registeredApps==null){
