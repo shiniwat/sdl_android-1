@@ -45,7 +45,10 @@ import android.os.Looper;
 import android.os.ConditionVariable;
 import android.content.Intent;
 
+import com.smartdevicelink.exception.SdlException;
+import com.smartdevicelink.exception.SdlExceptionCause;
 import com.smartdevicelink.protocol.SdlPacket;
+import com.smartdevicelink.proxy.rpc.enums.SdlDisconnectedReason;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.TransportRecord;
 import com.smartdevicelink.util.AndroidTools;
@@ -370,7 +373,9 @@ public class TransportManager {
             new Handler().postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    transportListener.onError(info + " - Legacy mode unacceptable; shutting down.");
+                    // This case, we should not go through onError->shutdown()->onTransportDisconnect router.
+                    // instead; we should let app know retry required.
+                    transportListener.onError(info + " - Legacy mode unacceptable; shutting down.", true);
 
                 }
             },500);
@@ -400,7 +405,7 @@ public class TransportManager {
         void onTransportDisconnected(String info, TransportRecord type, List<TransportRecord> connectedTransports);
 
         // Called when the transport manager experiences an unrecoverable failure
-        void onError(String info);
+        void onError(String info, boolean retryRequired);
         /**
          * Called when the transport manager has determined it needs to move towards a legacy style
          * transport connection. It will always be bluetooth.

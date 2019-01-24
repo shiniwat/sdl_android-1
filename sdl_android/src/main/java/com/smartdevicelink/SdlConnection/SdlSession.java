@@ -611,6 +611,11 @@ public class SdlSession implements ISdlConnectionListener, IHeartbeatMonitorList
     }
 
     @Override
+    public void onRetryRequired(String info) {
+        this.sessionListener.onRetryRequired(info);
+    }
+
+    @Override
     public void sendHeartbeat(IHeartbeatMonitor monitor) {
         Log.d(TAG, "Asked to send heartbeat");
         if (_sdlConnection != null)

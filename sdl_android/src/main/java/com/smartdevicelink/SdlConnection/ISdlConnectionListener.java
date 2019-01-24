@@ -38,4 +38,5 @@ public interface ISdlConnectionListener {
 	public void onHeartbeatTimedOut(byte sessionID);
 	
 	public void onProtocolServiceDataACK(SessionType sessionType, int dataSize, byte sessionID);
+	public void onRetryRequired(String info);
 }

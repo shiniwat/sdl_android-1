@@ -111,7 +111,7 @@ public class RouterServiceValidator {
 		setSecurityLevel(config.securityLevel);
 		inDebugMode = inDebugMode();
 	}
-	
+
 	/**
 	 * Main function to call to ensure we are connecting to a validated router service
 	 * @return whether or not the currently running router service can be trusted.
@@ -224,8 +224,8 @@ public class RouterServiceValidator {
 				}
 			}
 			if (!serviceNameLoader.isValid()) {
-				Log.d(TAG, "cannot find the connected service... fallback");
-				RouterServiceValidator.this.service = sdlAppInfoList.get(0).getRouterServiceComponentName();
+				Log.d(TAG, "cannot find the connected service... returning null");
+				//RouterServiceValidator.this.service = sdlAppInfoList.get(0).getRouterServiceComponentName();
 			} else {
 				Log.d(TAG, "foundService=" + serviceNameLoader.getServiceName());
 				RouterServiceValidator.this.service = serviceNameLoader.getServiceName();
@@ -245,7 +245,7 @@ public class RouterServiceValidator {
 			static final String packageKey = "packageName";
 			static final String classKey = "className";
 			static final String tsKey = "timestamp";
-			final int _validSpan = 60;
+			final int _validSpan = 300;
 			ComponentName _serviceName;
 			long _timeStamp;
 
