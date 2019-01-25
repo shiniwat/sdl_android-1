@@ -473,7 +473,7 @@ public class SdlProtocol {
 
     private void onTransportNotAccepted(String info){
         if(iSdlProtocol != null) {
-            iSdlProtocol.shutdown(info, false);
+            iSdlProtocol.shutdown(info);
         }
     }
 
@@ -1150,7 +1150,7 @@ public class SdlProtocol {
             if (disconnectedTransport == null) {
                 Log.d(TAG, "onTransportDisconnected");
                 transportManager.close(iSdlProtocol.getSessionId());
-                iSdlProtocol.shutdown("No transports left connected", false);
+                iSdlProtocol.shutdown("No transports left connected");
                 return;
             } else {
                 Log.d(TAG, "onTransportDisconnected - " + disconnectedTransport.getType().name());
@@ -1202,8 +1202,9 @@ public class SdlProtocol {
         }
 
         @Override
-        public void onError(String info, boolean retryRequired) {
-            iSdlProtocol.shutdown(info, retryRequired);
+        public void onError(String info) {
+            iSdlProtocol.shutdown(info);
+
         }
 
         @Override

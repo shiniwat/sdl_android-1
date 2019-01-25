@@ -476,13 +476,6 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				session.onProtocolServiceDataACK(serviceType, dataSize, sessionID);
 			}
 		}
-
-		@Override
-		public void onRetryRequired(String info) {
-			for (SdlSession session : listenerList) {
-				session.onRetryRequired(info);
-			}
-		}
 	}
 		
 	public int getRegisterCount() {

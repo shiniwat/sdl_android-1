@@ -89,7 +89,6 @@ import com.smartdevicelink.trace.TraceDeviceInfo;
 import com.smartdevicelink.trace.enums.InterfaceActivityDirection;
 import com.smartdevicelink.transport.BaseTransportConfig;
 import com.smartdevicelink.transport.MultiplexTransportConfig;
-import com.smartdevicelink.transport.RouterServiceValidator;
 import com.smartdevicelink.transport.SiphonServer;
 import com.smartdevicelink.transport.USBTransportConfig;
 import com.smartdevicelink.transport.enums.TransportType;
@@ -714,11 +713,6 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			} else {
 				_proxyListener.onServiceDataACK(dataSize);						
 			}
-		}
-
-		@Override
-		public void onRetryRequired(String info) {
-			notifyProxyClosed(info, new SdlException("Retry required", SdlExceptionCause.SDL_UNAVAILABLE), SdlDisconnectedReason.RETRY_REQUIRED);
 		}
 	}
 
@@ -4135,7 +4129,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 	
 	protected void notifyProxyClosed(final String info, final Exception e, final SdlDisconnectedReason reason) {		
 		SdlTrace.logProxyEvent("NotifyProxyClose", SDL_LIB_TRACE_KEY);
-		Log.d(TAG, "notifyProxyClosed: " + info + "; exception=" + e.getMessage() + "; reason=" + reason);
+		Log.d(TAG, "notifyProxyClosed: " + info);
 		OnProxyClosed message = new OnProxyClosed(info, e, reason);
 		queueInternalMessage(message);
 	}

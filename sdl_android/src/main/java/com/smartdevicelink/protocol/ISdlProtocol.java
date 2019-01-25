@@ -42,7 +42,7 @@ public interface ISdlProtocol extends IProtocolListener {
 
     byte getSessionId();
 
-    void shutdown(String info, boolean retryRequired);
+    void shutdown(String info);
 
     void onTransportDisconnected(String info, boolean altTransportAvailable, MultiplexTransportConfig transportConfig);
 

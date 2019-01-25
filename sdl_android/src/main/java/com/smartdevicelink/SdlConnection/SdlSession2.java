@@ -165,13 +165,9 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
     }
 
 
-    public void shutdown(String info, boolean retryRequired){
-        Log.d(TAG, "Shutdown - " + info + "; retryRequired=" + retryRequired);
-        if (retryRequired) {
-            this.sessionListener.onRetryRequired(info);
-        } else {
-            this.sessionListener.onTransportDisconnected(info);
-        }
+    public void shutdown(String info){
+        Log.d(TAG, "Shutdown - " + info);
+        this.sessionListener.onTransportDisconnected(info);
 
     }
 
