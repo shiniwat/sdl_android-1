@@ -39,6 +39,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -152,7 +153,7 @@ public class TransportBroker {
             Log.w(TAG, "Attempted to send null message");
             return false;
         }
-        //Log.i(TAG, "Attempting to send message type - " + message.what);
+        //Log.i(TAG, "Attempting to send message type - " + message.what + "; thread=" + Thread.currentThread().getName());
         if (isBound && routerServiceMessenger != null) {
             if (registeredWithRouterService
                     || message.what == TransportConstants.ROUTER_REGISTER_CLIENT) { //We can send a message if we are registered or are attempting to register
@@ -692,15 +693,27 @@ public class TransportBroker {
     }
 
     private void sendRegistrationMessage() {
-        Message msg = Message.obtain();
-        msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
-        msg.replyTo = this.clientMessenger;
-        Bundle bundle = new Bundle();
-        bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
-        bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-        bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
-        msg.setData(bundle);
-        sendMessageToRouterService(msg);
+        // sendRegistrationMessage is called from main thread, and may not be executed in timely manner. Use AsyncTask to avoid the case where main thread is blocked.
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... voids) {
+                Message msg = Message.obtain();
+                msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
+                msg.replyTo = clientMessenger;
+                Bundle bundle = new Bundle();
+                bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
+                bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
+                bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
+                msg.setData(bundle);
+                sendMessageToRouterService(msg);
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void aVoid) {
+                super.onPostExecute(aVoid);
+            }
+        }.execute();
     }
 
     private void unregisterWithRouterService() {
