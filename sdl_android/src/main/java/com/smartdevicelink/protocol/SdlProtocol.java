@@ -145,7 +145,7 @@ public class SdlProtocol {
         this.requestedPrimaryTransports = this.transportConfig.getPrimaryTransports();
         this.requestedSecondaryTransports = this.transportConfig.getSecondaryTransports();
         this.requiresHighBandwidth = this.transportConfig.requiresHighBandwidth();
-        this.transportManager = new TransportManager(transportConfig, transportEventListener);
+        this.transportManager = new TransportManager(transportConfig, transportEventListener, true);
 
 
         mtus.put(SessionType.RPC, (long) (V1_V2_MTU_SIZE - headerSize));
@@ -153,7 +153,8 @@ public class SdlProtocol {
 
 
     public void start(){
-        transportManager.start();
+        Log.d(TAG, "start has been moved to TransportManager.ctor");
+        //transportManager.start();
 
     }
     /**

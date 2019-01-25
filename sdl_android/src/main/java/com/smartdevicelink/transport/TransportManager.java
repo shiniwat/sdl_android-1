@@ -78,7 +78,7 @@ public class TransportManager {
      * If transport is not connected. Request Router service connect to it. Get connected message
      */
 
-    public TransportManager(MultiplexTransportConfig config, TransportEventListener listener){
+    public TransportManager(final MultiplexTransportConfig config, TransportEventListener listener, final boolean autoStart){
 
         this.transportListener = listener;
         this.TRANSPORT_STATUS_LOCK = new Object();
@@ -90,23 +90,32 @@ public class TransportManager {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
-        RouterServiceValidator validator = new RouterServiceValidator(config);
-        if(validator.validate()){
-            //transport = new TransportBrokerImpl(config.context, config.appId,config.service);
-            ConditionVariable cond = new ConditionVariable();
-            if (config.service == null) {
-                config.service = validator.getService();
+        final RouterServiceValidator validator = new RouterServiceValidator(config);
+        validator.validateAsync(new RouterServiceValidator.ValidationStatusCallback() {
+            @Override
+            public void onFinishedValidation(boolean valid, ComponentName name) {
+                Log.d(TAG, "onFinishedValidation valid=" + valid + "; name=" + name);
+                if (valid) {
+                    ConditionVariable cond = new ConditionVariable();
+                    if (config.service == null) {
+                        config.service = name;
+                    }
+                    _brokerThread = new TransportBrokerThread(config.context, config.appId, config.service, cond);
+                    _brokerThread.start();
+                    cond.block();
+                    transport = _brokerThread.getBroker();
+                    if (autoStart) {
+                        start();
+                    }
+                } else {
+                    enterLegacyMode("Router service is not trusted. Entering legacy mode");
+                }
             }
-            _brokerThread = new TransportBrokerThread(config.context, config.appId, config.service, cond);
-            _brokerThread.start();
-            cond.block();
-            transport = _brokerThread.getBroker();
-        }else{
-            enterLegacyMode("Router service is not trusted. Entering legacy mode");
-        }
+        });
     }
 
     public void start(){
+        Log.d(TAG, "TransportManager start got called; transport=" + transport);
         if(transport != null){
             transport.start();
         }else if(legacyBluetoothTransport != null){
