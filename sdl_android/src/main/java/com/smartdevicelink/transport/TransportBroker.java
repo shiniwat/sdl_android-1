@@ -157,7 +157,7 @@ public class TransportBroker {
             Log.w(TAG, "Attempted to send null message");
             return false;
         }
-        //Log.i(TAG, "Attempting to send message type - " + message.what + "; thread=" + Thread.currentThread().getName());
+        Log.i(TAG, "Attempting to send message type - " + message.what + "; thread=" + Thread.currentThread().getName());
         if (isBound && routerServiceMessenger != null) {
             if (registeredWithRouterService
                     || message.what == TransportConstants.ROUTER_REGISTER_CLIENT) { //We can send a message if we are registered or are attempting to register
