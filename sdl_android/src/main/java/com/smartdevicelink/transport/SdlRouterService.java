@@ -1194,7 +1194,7 @@ public class SdlRouterService extends Service{
 			startTimeOfTimer = 0;
 			return; // we have the connection by ourselves.
 		}
-		List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(getApplicationContext(), new SdlAppInfo.BestRouterComparator());
+		List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(getApplicationContext(), new SdlAppInfo.FindConnectedRouterComparator());
 		if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
 			final ComponentName myName = new ComponentName(this, this.getClass());
 			for (SdlAppInfo info: sdlAppInfoList) {

@@ -273,7 +273,7 @@ public class RouterServiceValidator {
 				return serviceNameLoader.getServiceName();
 			}
 
-			List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(contexts[0], new SdlAppInfo.BestRouterComparator());
+			List<SdlAppInfo> sdlAppInfoList = AndroidTools.querySdlAppInfo(contexts[0], new SdlAppInfo.FindConnectedRouterComparator());
 			if (sdlAppInfoList != null && !sdlAppInfoList.isEmpty()) {
 				SdlAppInfo lastItem = sdlAppInfoList.get(sdlAppInfoList.size()-1);
 				for (SdlAppInfo info: sdlAppInfoList) {
