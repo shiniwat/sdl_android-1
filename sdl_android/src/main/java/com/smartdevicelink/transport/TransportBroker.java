@@ -126,12 +126,16 @@ public class TransportBroker {
         routerConnection = new ServiceConnection() {
 
             public void onServiceConnected(ComponentName className, IBinder service) {
-                Log.d(TAG, "Bound to service " + className.toString());
-                routerServiceMessenger = new Messenger(service);
-                isBound = true;
-                //So we just established our connection
-                //Register with router service
-                sendRegistrationMessage();
+                if (routerServiceMessenger == null) {
+                    Log.d(TAG, "Bound to service " + className.toString() + "; ");
+                    routerServiceMessenger = new Messenger(service);
+                    isBound = true;
+                    //So we just established our connection
+                    //Register with router service
+                    sendRegistrationMessage();
+                } else {
+                    Log.w(TAG, "onServiceConnected got called while messenger already exists. Ignore this time.");
+                }
             }
 
             public void onServiceDisconnected(ComponentName className) {
@@ -189,11 +193,11 @@ public class TransportBroker {
                     return false;
                 }
             } else {
-                Log.e(TAG, "Unable to send message to router service. Not registered.");
+                Log.e(TAG, "Unable to send message to router service. Not registered. Message=" + message.what + "; thread=" + Thread.currentThread().getName());
                 return false;
             }
         } else {
-            Log.e(TAG, "Unable to send message to router service. Not bound.");
+            Log.e(TAG, "Unable to send message to router service. Not bound. Message=" + message.what + "; thread=" + Thread.currentThread().getName());
             return false;
         }
     }
@@ -697,15 +701,25 @@ public class TransportBroker {
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... voids) {
-                Message msg = Message.obtain();
-                msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
-                msg.replyTo = clientMessenger;
-                Bundle bundle = new Bundle();
-                bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
-                bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-                bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
-                msg.setData(bundle);
-                sendMessageToRouterService(msg);
+                final int retryCount = 3;
+                for (int i=0; i<retryCount; i++) {
+                    Message msg = Message.obtain();
+                    msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
+                    msg.replyTo = clientMessenger;
+                    Bundle bundle = new Bundle();
+                    bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
+                    bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
+                    bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
+                    msg.setData(bundle);
+                    if (sendMessageToRouterService(msg)) {
+                        break;
+                    } else {
+                        try {
+                            Log.e(TAG, "failed to sendRegistrationMessage retry counter=" + i);
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {}
+                    }
+                }
                 return null;
             }
 
@@ -807,20 +821,30 @@ public class TransportBroker {
     }
 
     public void requestNewSession(TransportRecord transportRecord) {
-        Message msg = Message.obtain();
-        msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
-        msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
-        Bundle bundle = new Bundle();
-        if (routerServiceVersion < TransportConstants.RouterServiceVersions.APPID_STRING) {
-            bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId));
+        final int retryCount = 3;
+        for (int i=0; i<retryCount; i++) {
+            Message msg = Message.obtain();
+            msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
+            msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
+            Bundle bundle = new Bundle();
+            if (routerServiceVersion < TransportConstants.RouterServiceVersions.APPID_STRING) {
+                bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId));
+            }
+            bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
+            if (transportRecord != null) {
+                bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
+                bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
+            }
+            msg.setData(bundle);
+            if (this.sendMessageToRouterService(msg)) {
+                break;
+            } else {
+                try {
+                    Log.e(TAG, "failed to requestNewSession; retry counter=" + i);
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {}
+            }
         }
-        bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-        if (transportRecord != null) {
-            bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
-            bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
-        }
-        msg.setData(bundle);
-        this.sendMessageToRouterService(msg);
     }
 
     /**
