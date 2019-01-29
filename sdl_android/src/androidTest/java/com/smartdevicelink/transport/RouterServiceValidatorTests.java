@@ -27,6 +27,7 @@ public class RouterServiceValidatorTests extends AndroidTestCase2 {
         isTrustedPackageTestInternal(validator, "app.mytoyota.toyota.com.mytoyota");
         isTrustedPackageTestInternal(validator, "au.com.toyota.mytoyota.app");
         isTrustedPackageTestInternal(validator, "au.com.lexus.mylexus.app");
+        isTrustedPackageTestInternal(validator, "com.xevo.samplecapp");
     }
 
     private void isTrustedPackageTestInternal(RouterServiceValidator validator, String packageName) {

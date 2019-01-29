@@ -52,7 +52,7 @@ public class TransportManagerTests extends AndroidTestCase2 {
     }
 
     public TransportManager createTransportManager(){
-        TransportManager manager = new TransportManager(config,defaultListener);
+        TransportManager manager = new TransportManager(config,defaultListener, false);
 
         //The default listener returns false as legacy is unacceptable
         assertNull(manager.legacyBluetoothHandler);
@@ -66,12 +66,12 @@ public class TransportManagerTests extends AndroidTestCase2 {
     }
 
     public void testBase(){
-        TransportManager manager = new TransportManager(config,defaultListener);
+        TransportManager manager = new TransportManager(config,defaultListener, false);
         assertNotNull(manager);
     }
 
     public void testConnectionStatus(){
-        TransportManager manager = new TransportManager(config,defaultListener);
+        TransportManager manager = new TransportManager(config,defaultListener, false);
 
         manager.transportStatus.clear();
         manager.transportStatus.add(defaultBtRecord);
