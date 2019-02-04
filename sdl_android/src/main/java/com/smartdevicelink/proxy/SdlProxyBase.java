@@ -5,6 +5,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -4314,6 +4315,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		@Override
 		public Void call() {
 			try {
+				Log.d(TAG, "in CallableMethod thread=" + Thread.currentThread().getName());
 				Thread.sleep(waitTime);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -4590,11 +4592,11 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
     @SuppressWarnings("unused")
     public IVideoStreamListener startVideoStream(boolean isEncrypted, VideoStreamingParameters parameters) {
         if (sdlSession == null) {
-            DebugTool.logWarning("SdlSession is not created yet.");
+            Log.e(TAG, "SdlSession is not created yet.");
             return null;
         }
         if (!sdlSession.getIsConnected()) {
-            DebugTool.logWarning("Connection is not available.");
+            Log.e(TAG, "Connection is not available.");
             return null;
         }
 
@@ -4602,9 +4604,12 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 		VideoStreamingParameters acceptedParams = tryStartVideoStream(isEncrypted, parameters);
         if (acceptedParams != null) {
+        	Log.d(TAG, "about sdlSession.startVideoStream");
             return sdlSession.startVideoStream();
         } else {
+        	Log.e(TAG, "accepted param is null");
             return null;
+            //return sdlSession.startVideoStream(); // just a try
         }
     }
 
@@ -4763,16 +4768,17 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
      */
     @SuppressWarnings("unused")
 	private VideoStreamingParameters tryStartVideoStream(boolean isEncrypted, VideoStreamingParameters parameters) {
+    	Log.d(TAG, "tryStartVideoStream thread=" + Thread.currentThread().getName());
         if (sdlSession == null) {
-            DebugTool.logWarning("SdlSession is not created yet.");
+            Log.e(TAG, "SdlSession is not created yet.");
             return null;
         }
         if(protocolVersion!= null && protocolVersion.getMajor() >= 5 && !_systemCapabilityManager.isCapabilitySupported(SystemCapabilityType.VIDEO_STREAMING)){
-			DebugTool.logWarning("Module doesn't support video streaming.");
+			Log.e(TAG, "Module doesn't support video streaming.");
 			return null;
 		}
         if (parameters == null) {
-            DebugTool.logWarning("Video parameters were not supplied.");
+            Log.e(TAG, "Video parameters were not supplied.");
             return null;
         }
 
@@ -4808,10 +4814,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 				builder.append(paramName);
 			}
 
-			DebugTool.logWarning("StartService for nav failed. Rejected params: " + builder.toString());
+			Log.e(TAG, "StartService for nav failed. Rejected params: " + builder.toString());
 
         } else {
-			DebugTool.logWarning("StartService for nav failed (rejected params not supplied)");
+			Log.e(TAG, "StartService for nav failed (rejected params not supplied)");
 		}
 
         return null;
@@ -7485,7 +7491,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		public void startVideoStreaming(Class<? extends SdlRemoteDisplay> remoteDisplayClass, VideoStreamingParameters parameters, boolean encrypted){
 			streamListener = startVideoStream(encrypted,parameters);
 			if(streamListener == null){
-				Log.e(TAG, "Error starting video service");
+				Log.e(TAG, "startVideoStream failed;");
 				return;
 			}
 			VideoStreamingCapability capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);

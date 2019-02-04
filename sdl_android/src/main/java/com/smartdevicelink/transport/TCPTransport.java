@@ -5,9 +5,14 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
+import java.util.concurrent.LinkedBlockingDeque;
 
 import android.annotation.TargetApi;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Looper;
 import android.os.NetworkOnMainThreadException;
 import android.util.Log;
 
@@ -15,6 +20,9 @@ import com.smartdevicelink.exception.SdlException;
 import com.smartdevicelink.exception.SdlExceptionCause;
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
+
+import static com.smartdevicelink.util.DebugTool.logError;
+import static com.smartdevicelink.util.NativeLogTool.logInfo;
 
 /**
  * General comments:
@@ -46,6 +54,7 @@ import com.smartdevicelink.transport.enums.TransportType;
  */
 public class TCPTransport extends SdlTransport {
 
+    final String TAG = "TCPTransport";
     /**
      * Size of the read buffer.
      */
@@ -69,23 +78,26 @@ public class TCPTransport extends SdlTransport {
     /**
      * Instance of the client socket
      */
-    private Socket mSocket = null;
+    //private Socket mSocket = null;
 
     /**
      * Instance of the input stream. Used to read data from SmartDeviceLinkCore
      */
-    private InputStream mInputStream = null;
+    //private InputStream mInputStream = null;
 
     /**
      * Instance of the output stream. Used to send data to SmartDeviceLinkCore
      */
-    private OutputStream mOutputStream = null;
+    //private OutputStream mOutputStream = null;
+    SocketChannel mChannel;
 
     /**
      * Instance of the separate thread, that does actual work, related to connecting/reading/writing data
      */
     private TCPTransportThread mThread = null;
 
+    private WriterThread mWriterThread = null;
+    private LinkedBlockingDeque<SdlPacket> mLinkedQueue;
     /**
      * Initial internal state of the component. Used like a simple lightweight FSM replacement while component
      * must behave differently in response to it's public function calls depending of it's current state
@@ -98,11 +110,19 @@ public class TCPTransport extends SdlTransport {
      * @param tcpTransportConfig Instance of the TCP transport configuration
      * @param transportListener Listener that will be notified on different TCP transport activities
      */
+    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public TCPTransport(TCPTransportConfig tcpTransportConfig, ITransportListener transportListener) {
         super(transportListener);
         this.mConfig = tcpTransportConfig;
+        mLinkedQueue = new LinkedBlockingDeque<SdlPacket>();
     }
 
+    private void startWriteThread() {
+        if (mWriterThread == null) {
+            mWriterThread =  new TCPTransport.WriterThread();
+            mWriterThread.start();
+        }
+    }
     /**
      * Performs actual work of sending array of bytes over the transport
      * @param msgBytes Bytes to send
@@ -113,35 +133,26 @@ public class TCPTransport extends SdlTransport {
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     @Override
     protected boolean sendBytesOverTransport(SdlPacket packet) {
-        TCPTransportState currentState = getCurrentState();
-        byte[] msgBytes = packet.constructPacket();
-        logInfo(String.format("TCPTransport: sendBytesOverTransport requested. Size: %d, Offset: %d, Length: %d, Current state is: %s"
-                , msgBytes.length, 0, msgBytes.length, currentState.name()));
+        logInfo("sendBytesOverTransport: Current thread=" + Thread.currentThread().getName());
+        mLinkedQueue.add(packet);
+        return true; // always true
 
-        boolean bResult = false;
-
-        if(currentState == TCPTransportState.CONNECTED) {
-                if (mOutputStream != null) {
-                    logInfo("TCPTransport: sendBytesOverTransport request accepted. Trying to send data");
-                    try {
-                        mOutputStream.write(msgBytes, 0, msgBytes.length);
-                        bResult = true;
-                        logInfo("TCPTransport.sendBytesOverTransport: successfully send data");
-                    } catch (IOException | NetworkOnMainThreadException e) {
-                        logError("TCPTransport.sendBytesOverTransport: error during sending data: " + e.getMessage());
-                        bResult = false;
-                    }
-                } else {
-                    logError("TCPTransport: sendBytesOverTransport request accepted, but output stream is null");
-                }
+        /*--
+        new AsyncTask<SdlPacket, Void, Void>() {
+            @Override
+            protected Void doInBackground(SdlPacket... sdlPackets) {
+                mWriterThread.writePacket(sdlPackets[0]);
+                return null;
             }
-        else {
-            logInfo("TCPTransport: sendBytesOverTransport request rejected. Transport is not connected");
-            bResult = false;
-        }
 
-        return bResult;
+            @Override
+            protected void onPostExecute(Void aVoid) {
+                super.onPostExecute(aVoid);
+            }
+        }.execute(packet);
+        return true; --*/
     }
+
 
     /**
      * Tries to open connection to SmartDeviceLinkCore.
@@ -162,6 +173,7 @@ public class TCPTransport extends SdlTransport {
                     mThread.setDaemon(true);
                     mThread.start();
 
+                    startWriteThread();
                     // Initialize the SiphonServer
                     if (SiphonServer.getSiphonEnabledStatus()) {
                     	SiphonServer.init();
@@ -225,10 +237,19 @@ public class TCPTransport extends SdlTransport {
                 mThread.interrupt();
             }
 
+            if (mWriterThread != null) {
+                mWriterThread.cancel();
+                mWriterThread = null;
+            }
+            /*--
             if(mSocket != null){
                 mSocket.close();
             }
             mSocket = null;
+            --*/
+            if (mChannel != null && mChannel.isOpen()) {
+                mChannel.close();
+            }
         } catch (IOException e) {
             logError("TCPTransport.disconnect: Exception during disconnect: " + e.getMessage());
         }
@@ -327,6 +348,7 @@ public class TCPTransport extends SdlTransport {
                 do {
                     try {
 
+                        /*--
                         if ((null != mSocket) && (!mSocket.isClosed())) {
                             logInfo("TCPTransport.connect: Socket is not closed. Trying to close it");
                             mSocket.close();
@@ -337,12 +359,21 @@ public class TCPTransport extends SdlTransport {
                         mSocket.connect(new InetSocketAddress(mConfig.getIPAddress(), mConfig.getPort()));
                         mOutputStream = mSocket.getOutputStream();
                         mInputStream = mSocket.getInputStream();
+                        --*/
+                        if (mChannel != null && mChannel.isOpen()) {
+                            mChannel.close();
+                            mChannel = null;
+                        }
+                        mChannel = SocketChannel.open();
+                        mChannel.configureBlocking(false);
+                        mChannel.connect(new InetSocketAddress(mConfig.getIPAddress(), mConfig.getPort()));
+                        while(!mChannel.finishConnect()) {}
 
                     } catch (IOException e) {
                         logError("TCPTransport.connect: Exception during connect stage: " + e.getMessage());
                     }
 
-                    bConnected = (null != mSocket) && mSocket.isConnected();
+                    bConnected = true;//(null != mSocket) && mSocket.isConnected();
 
                     if(bConnected){
                         logInfo("TCPTransport.connect: Socket connected");
@@ -387,15 +418,23 @@ public class TCPTransport extends SdlTransport {
                 }
 
                 byte input;
-                byte[] buffer = new byte[READ_BUFFER_SIZE];
+                //byte[] buffer = new byte[READ_BUFFER_SIZE];
+                byte[] buffer;
                 int bytesRead;
                 boolean stateProgress = false;
                 while (!isHalted) {
                     //logInfo("TCPTransport.run: Waiting for data...");
                     try {
                         //input = (byte) mInputStream.read();
-                        bytesRead = mInputStream.read(buffer);
+                        //bytesRead = mInputStream.read(buffer);
+                        ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
+                        bytesRead = mChannel.read(byteBuffer);
+                        buffer = byteBuffer.array();
+                        if (bytesRead > 0) {
+                            Log.d(TAG, "TCPTransport.read:" + bytesRead);
+                        }
                     } catch (IOException e) {
+                        Log.e(TAG, e.getMessage());
                         internalHandleStreamReadError();
                         break;
                     }
@@ -454,9 +493,85 @@ public class TCPTransport extends SdlTransport {
             if(isHalted){
                 logError("TCPTransport.run: Exception during reading data, but thread already halted");
             } else {
-                logError("TCPTransport.run: Exception during reading data");
+                Log.e("TCPTransport","TCPTransport.run: Exception during reading data");
                 disconnect("Failed to read data from Sdl", new SdlException("Failed to read data from Sdl"
                         , SdlExceptionCause.SDL_CONNECTION_FAILED), false);
+            }
+        }
+    }
+
+    /**
+     * Like TCPTransportThread, we need writer thread as well.
+     */
+    private class WriterThread extends Thread {
+        private boolean mCancelled = false;
+        private Looper _threadLooper;
+
+        public int writePacket(SdlPacket packet) {
+            logInfo("writePacket: Current thread=" + Thread.currentThread().getName());
+            TCPTransportState currentState = getCurrentState();
+            byte[] msgBytes = packet.constructPacket();
+            int wroteBytes = 0;
+            logInfo(String.format("TCPTransport: writePacket requested. Size: %d, Offset: %d, Length: %d, Current state is: %s"
+                    , msgBytes.length, 0, msgBytes.length, currentState.name()));
+
+            if(currentState == TCPTransportState.CONNECTED && !mCancelled) {
+                logInfo("TCPTransport.writePacket request accepted. Trying to send data");
+                try {
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(msgBytes.length+1);
+                    byteBuffer.clear();
+                    byteBuffer.put(msgBytes);
+                    byteBuffer.flip();
+                    while(byteBuffer.hasRemaining()) {
+                        mChannel.write(byteBuffer);
+                    }
+                    logInfo("TCPTransport.writePacket: successfully send data: " + msgBytes.length);
+                    wroteBytes = msgBytes.length;
+                } catch (IOException e) {
+                    logError("TCPTransport.writePacket: error during sending data: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+            else {
+                logInfo("TCPTransport: writePacket request rejected. Transport is not connected");
+            }
+            return wroteBytes;
+        }
+
+        @Override
+        public void run() {
+            while(!isInterrupted() && !mCancelled) {
+                SdlPacket packet = mLinkedQueue.poll();
+                if (packet != null) {
+                    writePacket(packet);
+                }
+            }
+        }
+
+        @TargetApi(18)
+        public synchronized void cancel() {
+            mCancelled = true;
+            /*--
+            if (mOutputStream != null) {
+                synchronized (TCPTransport.this) {
+                    try {
+                        mOutputStream.flush();
+                    } catch (IOException e) {
+                        logError("TCPTransport flushing output stream failed: " + e.getMessage());
+                    }
+
+                    try {
+                        mOutputStream.close();
+                    } catch (IOException e) {
+                        logError("TCPTransport closing output stream failed: " + e.getMessage());
+                    }
+                    mOutputStream = null;
+                }
+            }
+            --*/
+            if (_threadLooper != null) {
+                _threadLooper.quitSafely();
+                _threadLooper = null;
             }
         }
     }
