@@ -76,19 +76,8 @@ public class TCPTransport extends SdlTransport {
     private TCPTransportConfig mConfig = null;
 
     /**
-     * Instance of the client socket
+     * SocketChannel used by transport.
      */
-    //private Socket mSocket = null;
-
-    /**
-     * Instance of the input stream. Used to read data from SmartDeviceLinkCore
-     */
-    //private InputStream mInputStream = null;
-
-    /**
-     * Instance of the output stream. Used to send data to SmartDeviceLinkCore
-     */
-    //private OutputStream mOutputStream = null;
     SocketChannel mChannel;
 
     /**
@@ -136,21 +125,6 @@ public class TCPTransport extends SdlTransport {
         logInfo("sendBytesOverTransport: Current thread=" + Thread.currentThread().getName());
         mLinkedQueue.add(packet);
         return true; // always true
-
-        /*--
-        new AsyncTask<SdlPacket, Void, Void>() {
-            @Override
-            protected Void doInBackground(SdlPacket... sdlPackets) {
-                mWriterThread.writePacket(sdlPackets[0]);
-                return null;
-            }
-
-            @Override
-            protected void onPostExecute(Void aVoid) {
-                super.onPostExecute(aVoid);
-            }
-        }.execute(packet);
-        return true; --*/
     }
 
 
@@ -241,12 +215,6 @@ public class TCPTransport extends SdlTransport {
                 mWriterThread.cancel();
                 mWriterThread = null;
             }
-            /*--
-            if(mSocket != null){
-                mSocket.close();
-            }
-            mSocket = null;
-            --*/
             if (mChannel != null && mChannel.isOpen()) {
                 mChannel.close();
             }
@@ -348,18 +316,6 @@ public class TCPTransport extends SdlTransport {
                 do {
                     try {
 
-                        /*--
-                        if ((null != mSocket) && (!mSocket.isClosed())) {
-                            logInfo("TCPTransport.connect: Socket is not closed. Trying to close it");
-                            mSocket.close();
-                        }
-
-                        logInfo(String.format("TCPTransport.connect: Socket is closed. Trying to connect to %s", mConfig));
-                        mSocket = new Socket();
-                        mSocket.connect(new InetSocketAddress(mConfig.getIPAddress(), mConfig.getPort()));
-                        mOutputStream = mSocket.getOutputStream();
-                        mInputStream = mSocket.getInputStream();
-                        --*/
                         if (mChannel != null && mChannel.isOpen()) {
                             mChannel.close();
                             mChannel = null;
@@ -425,8 +381,6 @@ public class TCPTransport extends SdlTransport {
                 while (!isHalted) {
                     //logInfo("TCPTransport.run: Waiting for data...");
                     try {
-                        //input = (byte) mInputStream.read();
-                        //bytesRead = mInputStream.read(buffer);
                         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
                         bytesRead = mChannel.read(byteBuffer);
                         buffer = byteBuffer.array();
@@ -551,24 +505,6 @@ public class TCPTransport extends SdlTransport {
         @TargetApi(18)
         public synchronized void cancel() {
             mCancelled = true;
-            /*--
-            if (mOutputStream != null) {
-                synchronized (TCPTransport.this) {
-                    try {
-                        mOutputStream.flush();
-                    } catch (IOException e) {
-                        logError("TCPTransport flushing output stream failed: " + e.getMessage());
-                    }
-
-                    try {
-                        mOutputStream.close();
-                    } catch (IOException e) {
-                        logError("TCPTransport closing output stream failed: " + e.getMessage());
-                    }
-                    mOutputStream = null;
-                }
-            }
-            --*/
             if (_threadLooper != null) {
                 _threadLooper.quitSafely();
                 _threadLooper = null;
