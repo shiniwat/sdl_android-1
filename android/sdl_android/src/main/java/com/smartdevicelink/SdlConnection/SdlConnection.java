@@ -334,6 +334,7 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	public void endService (SessionType sessionType, byte sessionID) {
 		synchronized(PROTOCOL_REFERENCE_LOCK){
 			if(_protocol != null){
+				Log.d(TAG, "EncProtocolService(" + sessionType.getName() + ", session=" + sessionID);
 				_protocol.EndProtocolService(sessionType, sessionID);
 			}
 		}
@@ -517,6 +518,12 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 				session.onAuthTokenReceived(authToken,sessionID);
 			}
 		}
+		@Override
+		public void onProtocolSessionStartFailed(SessionType sessionType) {
+			for (SdlSession session : listenerList) {
+				session.onProtocolSessionStartFailed(sessionType);
+			}
+		}
 	}
 		
 	public int getRegisterCount() {
@@ -657,5 +664,10 @@ public class SdlConnection implements IProtocolListener, ITransportListener {
 	@Override
 	public void onProtocolServiceDataACK(SessionType serviceType, int dataSize, byte sessionID) {
 		_connectionListener.onProtocolServiceDataACK(serviceType, dataSize, sessionID);
+	}
+
+	@Override
+	public void onProtocolSessionStartFailed(SessionType sessionType) {
+		_connectionListener.onProtocolSessionStartFailed(sessionType);
 	}
 }

@@ -40,7 +40,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.telephony.TelephonyManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -157,6 +157,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 
+import com.smartdevicelink.localdebug.DebugConst;
 
 
 @SuppressWarnings({"WeakerAccess", "Convert2Diamond"})
@@ -294,6 +295,26 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 	protected VideoStreamingManager manager; //Will move to SdlSession once the class becomes public
 
+	private boolean _isAppInterfaceRegistered;
+
+	private static class Log {
+		public static void e(String tag, String msg) {
+			android.util.Log.e(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void w(String tag, String msg) {
+			android.util.Log.w(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void i(String tag, String msg) {
+			android.util.Log.i(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+		public static void d(String tag, String msg) {
+			android.util.Log.d(tag, msg);
+			DebugConst.log(tag, msg);
+		}
+	}
 	protected String authToken;
 
 	private Version minimumProtocolVersion;
@@ -544,8 +565,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 			if( altTransportAvailable){
 				SdlProxyBase.this._transportConfig = transportConfig;
-				Log.d(TAG, "notifying RPC session ended, but potential primary transport available");
-				cycleProxy(SdlDisconnectedReason.PRIMARY_TRANSPORT_CYCLE_REQUEST);
+				// let's suppress cycleProxy for Xevo apps, because cycleProxy mess up the internal state.
+				//Log.d(TAG, "notifying RPC session ended, but potential primary transport available");
+				//cycleProxy(SdlDisconnectedReason.PRIMARY_TRANSPORT_CYCLE_REQUEST);
+				notifyProxyClosed("OnAppInterfaceUnregistered", null, SdlDisconnectedReason.APP_INTERFACE_UNREG);
 
 			}else{
 				notifyProxyClosed(info, new SdlException("Transport disconnected.", SdlExceptionCause.SDL_UNAVAILABLE), SdlDisconnectedReason.TRANSPORT_DISCONNECT);
@@ -612,7 +635,8 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
         	}
 
 			
-			if (sessionType.eq(SessionType.RPC)) {	
+			Log.d(TAG, "onProtocolSessionStarted sessionType=" + sessionType.getName());
+			if (sessionType.eq(SessionType.RPC)) {
 
 				if (!isEncrypted)
 				{
@@ -626,19 +650,23 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 						 incomingHeartbeatMonitor.setInterval(_transportConfig.getHeartBeatTimeout());
 			             sdlSession.setIncomingHeartbeatMonitor(incomingHeartbeatMonitor);
 					 }		
-					 
-					startRPCProtocolSession();
+
+					if (!_isAppInterfaceRegistered) {
+						startRPCProtocolSession();
+					}
 				}
 				else
 				{
-					RPCProtectedServiceStarted();
+					if (!_isAppInterfaceRegistered) {
+						RPCProtectedServiceStarted();
+					}
 				}
 			} else if (sessionType.eq(SessionType.NAV)) {
 				NavServiceStarted();
 			} else if (sessionType.eq(SessionType.PCM)) {
 				AudioServiceStarted();
-			} else if (sessionType.eq(SessionType.RPC)){
-				cycleProxy(SdlDisconnectedReason.RPC_SESSION_ENDED);
+			//} else if (sessionType.eq(SessionType.RPC)){ // this would be broken else-if (never happens)
+			//	cycleProxy(SdlDisconnectedReason.RPC_SESSION_ENDED);
 			}
 			else if (protocolVersion!= null && protocolVersion.getMajor() > 1) {
 				//If version is 2 or above then don't need to specify a Session Type
@@ -650,6 +678,18 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		@Override
 		public void onProtocolSessionStartedNACKed(SessionType sessionType,
 				byte sessionID, byte version, String correlationID, List<String> rejectedParams) {
+			{       // CUSTOM logging
+				String rparams = null;
+				if (rejectedParams != null) {
+					rparams = "[";
+					for (String s : rejectedParams) {
+						rparams += s + ",";
+					}
+					rparams += "]";
+				}
+				DebugConst.log(TAG, "onProtocolSessionStartedNACKed() /stype:" + sessionType.getName() + " /sessionID:" + sessionID +
+						" /version:" + version + " /corId:" + correlationID + " /rparams:" + rparams);
+			}
 			OnServiceNACKed message = new OnServiceNACKed(sessionType);
 			queueInternalMessage(message);
 			
@@ -765,6 +805,10 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		public void onAuthTokenReceived(String authToken, byte sessionID) {
 			SdlProxyBase.this.authToken = authToken;
 		}
+		@Override
+		public void onProtocolSessionStartFailed(SessionType sessionType) {
+			((IProxyListener) _proxyListener).onProtocolSessionStartFailed(sessionType);
+		}
 	}
 
 	protected SdlProxyBase(){}
@@ -837,6 +881,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 								   BaseTransportConfig transportConfig) throws SdlException
 	{
 		Log.i(TAG, "SDL_LIB_VERSION: " + BuildConfig.VERSION_NAME);
+		if (DebugConst.getListener() != null) {
+			DebugConst.getListener().onNotifyVersion(BuildConfig.VERSION_NAME);
+		}
 		setProtocolVersion(new Version(PROX_PROT_VER_ONE,0,0));
 		
 		if (preRegister != null && preRegister)
@@ -947,6 +994,19 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_incomingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("INCOMING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// CUSTOMIZED logging
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:incomingMessage";
+									mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+									DebugConst.log(TAG, mes);
+
+								} catch (Exception e) {
+									DebugConst.log(TAG, "incomingMessage failed. /e:" + e.getMessage());
+									e.printStackTrace();
+								}
+							}
 							dispatchIncomingMessage(message);
 						}
 	
@@ -973,6 +1033,19 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 			_outgoingProxyMessageDispatcher = new ProxyMessageDispatcher<ProtocolMessage>("OUTGOING_MESSAGE_DISPATCHER",new IDispatchingStrategy<ProtocolMessage>() {
 						@Override
 						public void dispatch(ProtocolMessage message) {
+							// CUSTOMIZED logging
+							if (SessionType.RPC.equals(message.getSessionType())) {
+								try {
+									String mes = "RPC:outgoingMessage";
+									mes += " /funcId:" + message.getFunctionID() + ":" + FunctionID.getFunctionName(message.getFunctionID());
+									mes += " /data:" + (new String(message.getData(), "UTF-8"));
+									DebugConst.log(TAG, mes);
+
+								} catch (Exception e) {
+									DebugConst.log(TAG, "outgoingMessage failed. /e:" + e.getMessage());
+									e.printStackTrace();
+								}
+							}
 							dispatchOutgoingMessage(message);
 						}
 	
@@ -2594,6 +2667,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 									((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
 								}
 								onRPCResponseReceived(msg);
+								_isAppInterfaceRegistered = true;
 							}
 						});
 					} else {
@@ -2601,6 +2675,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 							((IProxyListener)_proxyListener).onRegisterAppInterfaceResponse(msg);
 						}
 						onRPCResponseReceived(msg);
+						_isAppInterfaceRegistered = true;
 					}
 				} else if ((new RPCResponse(hash)).getCorrelationID() == POLICIES_CORRELATION_ID 
 						&& functionName.equals(FunctionID.ON_ENCODED_SYNC_P_DATA.toString())) {
@@ -2653,22 +2728,41 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 					sendBroadcastIntent(sendIntent);
 				}
 				else if (functionName.equals(FunctionID.UNREGISTER_APP_INTERFACE.toString())) {
-						// UnregisterAppInterface					
-						_appInterfaceRegisterd = false;
-						synchronized(APP_INTERFACE_REGISTERED_LOCK) {
-							APP_INTERFACE_REGISTERED_LOCK.notify();
+					Log.e(TAG, "Got UNREGISTER_APP_INTERFACE message; needs to notify");
+					// UnregisterAppInterface
+					_appInterfaceRegisterd = false;
+					synchronized(APP_INTERFACE_REGISTERED_LOCK) {
+						APP_INTERFACE_REGISTERED_LOCK.notify();
+					}
+					final UnregisterAppInterfaceResponse msg = new UnregisterAppInterfaceResponse(hash);
+					msg.format(rpcSpecVersion, true);
+					Intent sendIntent = createBroadcastIntent();
+					updateBroadcastIntent(sendIntent, "RPC_NAME", FunctionID.UNREGISTER_APP_INTERFACE.toString());
+					updateBroadcastIntent(sendIntent, "TYPE", RPCMessage.KEY_RESPONSE);
+					updateBroadcastIntent(sendIntent, "SUCCESS", msg.getSuccess());
+					updateBroadcastIntent(sendIntent, "COMMENT1", msg.getInfo());
+					updateBroadcastIntent(sendIntent, "COMMENT2", msg.getResultCode().toString());
+					updateBroadcastIntent(sendIntent, "DATA",serializeJSON(msg));
+					updateBroadcastIntent(sendIntent, "CORRID", msg.getCorrelationID());
+					sendBroadcastIntent(sendIntent);
+
+					if (_callbackToUIThread) {
+						// Run in UI thread
+						_mainUIHandler.post(new Runnable() {
+							@Override
+							public void run() {
+								if (_proxyListener instanceof IProxyListener) {
+									((IProxyListener)_proxyListener).onUnregisterAppInterfaceResponse(msg);
+								}
+								onRPCResponseReceived(msg);
+							}
+						});
+					} else {
+						if (_proxyListener instanceof IProxyListener) {
+							((IProxyListener)_proxyListener).onUnregisterAppInterfaceResponse(msg);
 						}
-						final UnregisterAppInterfaceResponse msg = new UnregisterAppInterfaceResponse(hash);
-						msg.format(rpcSpecVersion, true);
-						Intent sendIntent = createBroadcastIntent();
-						updateBroadcastIntent(sendIntent, "RPC_NAME", FunctionID.UNREGISTER_APP_INTERFACE.toString());
-						updateBroadcastIntent(sendIntent, "TYPE", RPCMessage.KEY_RESPONSE);
-						updateBroadcastIntent(sendIntent, "SUCCESS", msg.getSuccess());
-						updateBroadcastIntent(sendIntent, "COMMENT1", msg.getInfo());
-						updateBroadcastIntent(sendIntent, "COMMENT2", msg.getResultCode().toString());
-						updateBroadcastIntent(sendIntent, "DATA",serializeJSON(msg));
-						updateBroadcastIntent(sendIntent, "CORRID", msg.getCorrelationID());
-						sendBroadcastIntent(sendIntent);
+						onRPCResponseReceived(msg);
+					}
 				}
 				return;
 			}
@@ -4073,8 +4167,9 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 				updateBroadcastIntent(sendIntent, "TYPE", RPCMessage.KEY_NOTIFICATION);
 				updateBroadcastIntent(sendIntent, "DATA",serializeJSON(msg));
 				sendBroadcastIntent(sendIntent);
+				_isAppInterfaceRegistered = false;
 
-				if (_advancedLifecycleManagementEnabled) {
+				if (_advancedLifecycleManagementEnabled && _transportConfig.isAutoRecycleEnabled()) {
 					// This requires the proxy to be cycled
                     cycleProxy(SdlDisconnectedReason.convertAppInterfaceUnregisteredReason(msg.getReason()));
                 } else {

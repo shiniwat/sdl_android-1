@@ -39,6 +39,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,7 +49,7 @@ import android.os.Messenger;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
-import android.util.Log;
+import com.smartdevicelink.localdebug.DebugConst;
 
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
@@ -103,16 +104,39 @@ public class TransportBroker {
     private int routerServiceVersion = 1;
     private int messagingVersion = MAX_MESSAGING_VERSION;
 
+    private static class Log {
+        public static void e(String tag, String msg) {
+            android.util.Log.e(tag, msg);
+            DebugConst.log(tag, msg);
+        }
+        public static void w(String tag, String msg) {
+            android.util.Log.w(tag, msg);
+            DebugConst.log(tag, msg);
+        }
+        public static void i(String tag, String msg) {
+            android.util.Log.i(tag, msg);
+            DebugConst.log(tag, msg);
+        }
+        public static void d(String tag, String msg) {
+            android.util.Log.d(tag, msg);
+            DebugConst.log(tag, msg);
+        }
+    }
+
     private void initRouterConnection() {
         routerConnection = new ServiceConnection() {
 
             public void onServiceConnected(ComponentName className, IBinder service) {
-                Log.d(TAG, "Bound to service " + className.toString());
-                routerServiceMessenger = new Messenger(service);
-                isBound = true;
-                //So we just established our connection
-                //Register with router service
-                sendRegistrationMessage();
+                if (routerServiceMessenger == null) {
+                    Log.d(TAG, "Bound to service " + className.toString() + "; ");
+                    routerServiceMessenger = new Messenger(service);
+                    isBound = true;
+                    //So we just established our connection
+                    //Register with router service
+                    sendRegistrationMessage();
+                } else {
+                    Log.w(TAG, "onServiceConnected got called while messenger already exists. Ignore this time.");
+                }
             }
 
             public void onServiceDisconnected(ComponentName className) {
@@ -135,7 +159,7 @@ public class TransportBroker {
             Log.w(TAG, "Attempted to send null message");
             return false;
         }
-        //Log.i(TAG, "Attempting to send message type - " + message.what);
+        //Log.i(TAG, "Attempting to send message type - " + message.what + "; thread=" + Thread.currentThread().getName());
         if (isBound && routerServiceMessenger != null) {
             if (registeredWithRouterService
                     || message.what == TransportConstants.ROUTER_REGISTER_CLIENT) { //We can send a message if we are registered or are attempting to register
@@ -171,11 +195,11 @@ public class TransportBroker {
                     return false;
                 }
             } else {
-                Log.e(TAG, "Unable to send message to router service. Not registered.");
+                Log.e(TAG, "Unable to send message to router service. Not registered. Message=" + message.what + "; thread=" + Thread.currentThread().getName());
                 return false;
             }
         } else {
-            Log.e(TAG, "Unable to send message to router service. Not bound.");
+            Log.e(TAG, "Unable to send message to router service. Not bound. Message=" + message.what + "; thread=" + Thread.currentThread().getName());
             return false;
         }
     }
@@ -657,28 +681,60 @@ public class TransportBroker {
             return false;
         }
         if (this.routerPackage != null && this.routerClassName != null) {
+            if (isBound) {
+                return true; // do NOT bind twice.
+            }
             Log.d(TAG, "Sending bind request to " + this.routerPackage + " - " + this.routerClassName);
+            DebugConst.connectRouter(this.routerPackage + ":" + this.routerClassName);
             Intent bindingIntent = new Intent();
             bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
             //Quickly make sure it's just up and running
-            getContext().startService(bindingIntent);
-            bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_CLIENT);
-            return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
+            // On Android O+, startServie may cause IllegalStateException. Get around for now
+            try {
+                getContext().startService(bindingIntent);
+                bindingIntent.setAction(TransportConstants.BIND_REQUEST_TYPE_CLIENT);
+                return getContext().bindService(bindingIntent, routerConnection, Context.BIND_AUTO_CREATE);
+            } catch(IllegalStateException e) {
+                e.printStackTrace();
+                return false;
+            }
         } else {
             return false;
         }
     }
 
     private void sendRegistrationMessage() {
-        Message msg = Message.obtain();
-        msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
-        msg.replyTo = this.clientMessenger;
-        Bundle bundle = new Bundle();
-        bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
-        bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-        bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
-        msg.setData(bundle);
-        sendMessageToRouterService(msg);
+        // sendRegistrationMessage is called from main thread, and may not be executed in timely manner. Use AsyncTask to avoid the case where main thread is blocked.
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... voids) {
+                final int retryCount = 3;
+                for (int i=0; i<retryCount; i++) {
+                    Message msg = Message.obtain();
+                    msg.what = TransportConstants.ROUTER_REGISTER_CLIENT;
+                    msg.replyTo = clientMessenger;
+                    Bundle bundle = new Bundle();
+                    bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId)); //We send this no matter what due to us not knowing what router version we are connecting to
+                    bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
+                    bundle.putInt(TransportConstants.ROUTER_MESSAGING_VERSION, messagingVersion);
+                    msg.setData(bundle);
+                    if (sendMessageToRouterService(msg)) {
+                        break;
+                    } else {
+                        try {
+                            Log.e(TAG, "failed to sendRegistrationMessage retry counter=" + i);
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {}
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void aVoid) {
+                super.onPostExecute(aVoid);
+            }
+        }.execute();
     }
 
     private void unregisterWithRouterService() {
@@ -772,20 +828,30 @@ public class TransportBroker {
     }
 
     public void requestNewSession(TransportRecord transportRecord) {
-        Message msg = Message.obtain();
-        msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
-        msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
-        Bundle bundle = new Bundle();
-        if (routerServiceVersion < TransportConstants.RouterServiceVersions.APPID_STRING) {
-            bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId));
+        final int retryCount = 3;
+        for (int i=0; i<retryCount; i++) {
+            Message msg = Message.obtain();
+            msg.what = TransportConstants.ROUTER_REQUEST_NEW_SESSION;
+            msg.replyTo = this.clientMessenger; //Including this in case this app isn't actually registered with the router service
+            Bundle bundle = new Bundle();
+            if (routerServiceVersion < TransportConstants.RouterServiceVersions.APPID_STRING) {
+                bundle.putLong(TransportConstants.APP_ID_EXTRA, convertAppId(appId));
+            }
+            bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
+            if (transportRecord != null) {
+                bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
+                bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
+            }
+            msg.setData(bundle);
+            if (this.sendMessageToRouterService(msg)) {
+                break;
+            } else {
+                try {
+                    Log.e(TAG, "failed to requestNewSession; retry counter=" + i);
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {}
+            }
         }
-        bundle.putString(TransportConstants.APP_ID_EXTRA_STRING, appId);
-        if (transportRecord != null) {
-            bundle.putString(TransportConstants.TRANSPORT_TYPE, transportRecord.getType().name());
-            bundle.putString(TransportConstants.TRANSPORT_ADDRESS, transportRecord.getAddress());
-        }
-        msg.setData(bundle);
-        this.sendMessageToRouterService(msg);
     }
 
     /**

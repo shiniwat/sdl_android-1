@@ -83,7 +83,8 @@ public abstract class MultiplexBaseTransport {
         return connectedDeviceAddress;
     }
 
-    public String getDeviceName(){
+    // WORK AROUND for reverting SdlRouterService (to get around some connectivity issue)
+    public String getDeviceName() {
         return connectedDeviceName;
     }
 
@@ -106,7 +107,7 @@ public abstract class MultiplexBaseTransport {
 
     public boolean isConnected()
     {
-        return (mState == STATE_CONNECTED);
+        return mState == STATE_CONNECTED;
     }
 
     public synchronized void stop() {

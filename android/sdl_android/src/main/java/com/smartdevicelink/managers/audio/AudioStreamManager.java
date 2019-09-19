@@ -38,9 +38,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.IntDef;
-import android.support.annotation.NonNull;
-import android.support.annotation.RequiresApi;
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import android.util.Log;
 
 import com.smartdevicelink.SdlConnection.SdlSession;
@@ -126,7 +126,7 @@ public class AudioStreamManager extends BaseAudioStreamManager {
             if (SessionType.PCM.equals(type)) {
                 serviceCompletionHandler.removeCallbacks(serviceCompletionTimeoutCallback);
 
-                session.stopAudioStream();
+                //session.stopAudioStream();
                 sdlAudioStream = null;
                 streamingStateMachine.transitionToState(StreamingStateMachine.NONE);
 

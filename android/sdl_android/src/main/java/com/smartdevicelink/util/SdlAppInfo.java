@@ -136,8 +136,10 @@ public class SdlAppInfo {
         public int compare(SdlAppInfo one, SdlAppInfo two) {
             if(one != null){
                 if(two != null){
+                    // custom router service is very low order.
                     if(one.isCustomRouterService){
                         if(two.isCustomRouterService){
+                            // should move to version check if both are custom router.
                             return 0;
                         }else{
                             return 1;
@@ -173,5 +175,53 @@ public class SdlAppInfo {
         }
 
 
+    }
+
+    /**
+     * This class is designed to find the connected RouterService. This class checks to see the latest custom router first,
+     * because it is likely uses different UUIDs.
+     */
+    public static class FindConnectedRouterComparator implements Comparator<SdlAppInfo>{
+
+        @Override
+        public int compare(SdlAppInfo one, SdlAppInfo two) {
+            if(one != null){
+                if(two != null){
+                    // custom router service is very low order.
+                    if(one.isCustomRouterService){
+                        if(two.isCustomRouterService){
+                            // should move to version check if both are custom router.
+                        }else{
+                            return -1;
+                        }
+                    }else if(two.isCustomRouterService){
+                        return 1;
+
+                    }//else, do nothing. Move to version check
+
+                    int versionCompare =  two.routerServiceVersion  - one.routerServiceVersion;
+
+                    if(versionCompare == 0){ //Versions are equal so lets use the one that has been updated most recently
+                        int updateTime =  (int)(two.lastUpdateTime - one.lastUpdateTime);
+                        if(updateTime == 0){
+                            //This is arbitrary, but we want to ensure all lists are sorted in the same order
+                            return  one.routerServiceComponentName.getPackageName().compareTo(two.routerServiceComponentName.getPackageName());
+                        }else{
+                            return updateTime;
+                        }
+                    }else{
+                        return versionCompare;
+                    }
+
+                }else{
+                    return -1;
+                }
+            }else{
+                if(two != null){
+                    return 1;
+                }
+            }
+            return 0;
+        }
     }
 }

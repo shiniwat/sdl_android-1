@@ -38,6 +38,11 @@ import android.graphics.Bitmap;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.ProcessLifecycleOwner;
 import com.smartdevicelink.managers.BaseSubManager;
 import com.smartdevicelink.managers.CompletionListener;
 import com.smartdevicelink.protocol.enums.FunctionID;
@@ -73,7 +78,7 @@ public class LockScreenManager extends BaseSubManager {
 	private String deviceIconUrl;
 	private boolean driverDistStatus;
 	private volatile boolean isApplicationForegrounded;
-	private android.arch.lifecycle.LifecycleObserver lifecycleObserver;
+	private LifecycleObserver lifecycleObserver;
 	protected boolean lockScreenEnabled, deviceLogoEnabled;
 	protected int lockScreenIcon, lockScreenColor, customView;
 	protected Bitmap deviceLogo;
@@ -120,8 +125,8 @@ public class LockScreenManager extends BaseSubManager {
 
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
 			try {
-				if (android.arch.lifecycle.ProcessLifecycleOwner.get() != null && lifecycleObserver != null) {
-					android.arch.lifecycle.ProcessLifecycleOwner.get().getLifecycle().removeObserver(lifecycleObserver);
+				if (ProcessLifecycleOwner.get() != null && lifecycleObserver != null) {
+					ProcessLifecycleOwner.get().getLifecycle().removeObserver(lifecycleObserver);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -204,21 +209,36 @@ public class LockScreenManager extends BaseSubManager {
 		// Set up listener for Application Foreground / Background events
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
 			try {
-				lifecycleObserver = new android.arch.lifecycle.LifecycleObserver() {
-					@android.arch.lifecycle.OnLifecycleEvent(android.arch.lifecycle.Lifecycle.Event.ON_START)
-					public void onMoveToForeground() {
-						isApplicationForegrounded = true;
-						launchLockScreenActivity();
+				lifecycleObserver = new LifecycleObserver() {
+					@Override
+					public int hashCode() {
+						return super.hashCode();
 					}
 
-					@android.arch.lifecycle.OnLifecycleEvent(android.arch.lifecycle.Lifecycle.Event.ON_STOP)
-					public void onMoveToBackground() {
-						isApplicationForegrounded = false;
+					@Override
+					public boolean equals(@Nullable Object obj) {
+						return super.equals(obj);
+					}
+
+					@Override
+					protected Object clone() throws CloneNotSupportedException {
+						return super.clone();
+					}
+
+					@NonNull
+					@Override
+					public String toString() {
+						return super.toString();
+					}
+
+					@Override
+					protected void finalize() throws Throwable {
+						super.finalize();
 					}
 				};
 
-				if (android.arch.lifecycle.ProcessLifecycleOwner.get() != null) {
-					android.arch.lifecycle.ProcessLifecycleOwner.get().getLifecycle().addObserver(lifecycleObserver);
+				if (ProcessLifecycleOwner.get() != null) {
+					ProcessLifecycleOwner.get().getLifecycle().addObserver(lifecycleObserver);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();

@@ -49,6 +49,7 @@ import com.smartdevicelink.proxy.rpc.ImageResolution;
 import com.smartdevicelink.proxy.rpc.VideoStreamingFormat;
 import com.smartdevicelink.proxy.rpc.enums.VideoStreamingCodec;
 import com.smartdevicelink.streaming.video.VideoStreamingParameters;
+import com.smartdevicelink.localdebug.DebugConst;
 
 import java.nio.ByteBuffer;
 
@@ -208,6 +209,10 @@ public class VirtualDisplayEncoder {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mVideoEncoder.setCallback(new MediaCodec.Callback() {
+
+                    int callCount = 0;
+                    int totalDataSize = 0;
+
                     @Override
                     public void onInputBufferAvailable(MediaCodec codec, int index) {
                         // nothing to do here
@@ -216,7 +221,15 @@ public class VirtualDisplayEncoder {
                     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
                     @Override
                     public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-                        try {
+                        if ( callCount == 0 ) {
+                            totalDataSize = 0;
+                            DebugConst.totalDataSize(0);
+                        }
+                        if (callCount % 1000 == 0) {
+                            DebugConst.log(TAG, "onOutputBufferAvailable /callCount:" + callCount);
+                        }
+                        callCount++;
+                         try {
                             ByteBuffer encodedData = codec.getOutputBuffer(index);
                             if (encodedData != null) {
                                 if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
@@ -240,6 +253,8 @@ public class VirtualDisplayEncoder {
 
                                     encodedData.get(dataToWrite, dataOffset, info.size);
                                     if (mOutputListener != null) {
+                                        totalDataSize += dataToWrite.length;
+                                        DebugConst.totalDataSize(totalDataSize);
                                         mOutputListener.sendFrame(dataToWrite, 0, dataToWrite.length, info.presentationTimeUs);
                                     }
                                 }

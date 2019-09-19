@@ -34,6 +34,7 @@ package com.smartdevicelink.transport;
 
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
+import android.annotation.TargetApi;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -44,6 +45,9 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Parcelable;
 import android.util.Log;
+import android.os.Looper;
+import android.os.ConditionVariable;
+import android.content.Intent;
 
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.protocol.enums.ControlFrameTags;
@@ -52,6 +56,7 @@ import com.smartdevicelink.transport.utl.TransportRecord;
 import com.smartdevicelink.util.DebugTool;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 
 @SuppressWarnings("unused")
@@ -59,13 +64,20 @@ public class TransportManager extends TransportManagerBase{
     private static final String TAG = "TransportManager";
 
 
+    TransportBrokerThread _brokerThread;
     TransportBrokerImpl transport;
+    final List<TransportRecord> transportStatus;
+    final TransportEventListener transportListener;
+    //final WeakReference<Context> contextWeakReference;
+
 
     //Legacy Transport
     MultiplexBluetoothTransport legacyBluetoothTransport;
     LegacyBluetoothHandler legacyBluetoothHandler;
 
     final WeakReference<Context> contextWeakReference;
+    final MultiplexTransportConfig mConfig;
+    final Object TRANSPORT_STATUS_LOCK;
 
 
     /**
@@ -74,35 +86,54 @@ public class TransportManager extends TransportManagerBase{
      * If transport is not connected. Request Router service connect to it. Get connected message
      */
 
-    public TransportManager(MultiplexTransportConfig config, TransportEventListener listener){
+    public TransportManager(final MultiplexTransportConfig config, TransportEventListener listener){
         super(config,listener);
+
+        this.transportListener = listener;
+        this.TRANSPORT_STATUS_LOCK = new Object();
+        this.mConfig = config;
+        synchronized (TRANSPORT_STATUS_LOCK){
+            this.transportStatus = new ArrayList<>();
+        }
 
         if(config.service == null) {
             config.service = SdlBroadcastReceiver.consumeQueuedRouterService();
         }
 
         contextWeakReference = new WeakReference<>(config.context);
-
-        RouterServiceValidator validator = new RouterServiceValidator(config);
-        if(validator.validate()){
-            transport = new TransportBrokerImpl(config.context, config.appId,config.service);
-        }else{
-            enterLegacyMode("Router service is not trusted. Entering legacy mode");
-        }
     }
 
-    @Override
-    public void start(){
-        if(transport != null){
-            if (!transport.start()){
-                //Unable to connect to a router service
-                if(transportListener != null){
-                    transportListener.onError("Unable to connect with the router service");
+    /**
+     * start is now synonym of startValidate, and transport.start gets called in startTransport.
+     */
+    public void start() {
+        final RouterServiceValidator validator = new RouterServiceValidator(mConfig);
+        validator.validateAsync(new RouterServiceValidator.ValidationStatusCallback() {
+            @Override
+            public void onFinishedValidation(boolean valid, ComponentName name) {
+                Log.d(TAG, "onFinishedValidation valid=" + valid + "; name=" + ((name == null)? "null" : name.getPackageName()));
+                if (valid) {
+                    ConditionVariable cond = new ConditionVariable();
+                    mConfig.service = name;
+                    if (_brokerThread == null) {
+                        _brokerThread = new TransportBrokerThread(mConfig.context, mConfig.appId, mConfig.service, cond);
+                        _brokerThread.start();
+                        cond.block();
+                        transport = _brokerThread.getBroker();
+                        Log.d(TAG, "TransportManager start got called; transport=" + transport);
+                        if(transport != null){
+                            transport.start();
+                        }else if(legacyBluetoothTransport != null){
+                            legacyBluetoothTransport.start();
+                        }
+                    } else {
+                        Log.e(TAG, "_brokerThread already exists; do NOT instantiate it twice!");
+                    }
+                } else {
+                    enterLegacyMode("Router service is not trusted. Entering legacy mode");
                 }
             }
-        }else if(legacyBluetoothTransport != null){
-            legacyBluetoothTransport.start();
-        }
+        });
     }
 
     @Override
@@ -113,6 +144,10 @@ public class TransportManager extends TransportManagerBase{
         }else if(legacyBluetoothTransport != null){
             legacyBluetoothTransport.stop();
             legacyBluetoothTransport = null;
+        }
+        if (_brokerThread != null) {
+            _brokerThread.cancel();
+            _brokerThread = null;
         }
     }
 
@@ -226,6 +261,8 @@ public class TransportManager extends TransportManagerBase{
         }else if(legacyBluetoothTransport != null){
             byte[] data = packet.constructPacket();
             legacyBluetoothTransport.write(data, 0, data.length);
+        } else {
+            Log.e(TAG, "sendPacket: nowhere to send..");
         }
     }
 
@@ -273,6 +310,12 @@ public class TransportManager extends TransportManagerBase{
             super(context,appId,routerService);
         }
 
+        @Override
+        public boolean start() {
+            shuttingDown = false;
+            return super.start();
+        }
+
         @SuppressWarnings("deprecation")
         @Override
         @Deprecated
@@ -281,7 +324,7 @@ public class TransportManager extends TransportManagerBase{
         }
 
         @Override
-        public synchronized boolean onHardwareConnected(List<TransportRecord> transports) {
+        public boolean onHardwareConnected(List<TransportRecord> transports) {
             super.onHardwareConnected(transports);
             DebugTool.logInfo("OnHardwareConnected");
             if(shuttingDown){
@@ -297,7 +340,7 @@ public class TransportManager extends TransportManagerBase{
 
 
         @Override
-        public synchronized void onHardwareDisconnected(TransportRecord record, List<TransportRecord> connectedTransports) {
+        public void onHardwareDisconnected(TransportRecord record, List<TransportRecord> connectedTransports) {
             if(record != null){
                 Log.d(TAG, "Transport disconnected - " + record);
             }else{
@@ -312,7 +355,7 @@ public class TransportManager extends TransportManagerBase{
                 //Might check connectedTransports vs transportStatus to ensure they are equal
 
                 //If the transport wasn't removed, check RS version for corner case
-                if(!wasRemoved && getRouterServiceVersion() == 8){
+                if(!wasRemoved && getRouterServiceVersion() == 8 && record != null){
                     boolean foundMatch = false;
                     //There is an issue in the first gen of multi transport router services that
                     //will remove certain extras from messages to the TransportBroker if older apps
@@ -354,7 +397,7 @@ public class TransportManager extends TransportManagerBase{
         }
 
         @Override
-        public synchronized void onLegacyModeEnabled() {
+        public void onLegacyModeEnabled() {
             if(shuttingDown){
                 return;
             }
@@ -385,9 +428,74 @@ public class TransportManager extends TransportManagerBase{
         }
 
         @Override
-        public synchronized void stop() {
+        public void stop() {
             shuttingDown = true;
             super.stop();
+        }
+    }
+
+    private class TransportBrokerThread extends Thread {
+        private boolean _connected;
+        private TransportBrokerImpl _broker;
+        final Context _context;
+        final String _appId;
+        final ComponentName _service;
+        Looper _threadLooper;
+        ConditionVariable mCond;
+
+        public TransportBrokerThread(Context context, String appId, ComponentName service, ConditionVariable cond) {
+            super();
+            this._context = context;
+            this._appId = appId;
+            this._service = service;
+            mCond = cond;
+        }
+
+        public void startConnection() {
+            synchronized(this) {
+                _connected = false;
+                if (_broker != null) {
+                    try {
+                        _broker.start();
+                    } catch(Exception e) {
+                        Log.e(TAG, "Error starting Transport: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        @TargetApi(18)
+        public synchronized void cancel() {
+            if (_broker == null) {
+                _broker.stop();
+                _broker = null;
+            }
+            _connected = false;
+            if (_threadLooper != null) {
+                _threadLooper.quitSafely();
+                _threadLooper = null;
+            }
+        }
+
+        @Override
+        public void run() {
+            Looper.prepare();
+            if (_broker == null) {
+                synchronized(this) {
+                    _broker = new TransportBrokerImpl(_context, _appId, _service);
+                    this.notify();
+                }
+                _threadLooper = Looper.myLooper();
+                mCond.open();
+                Looper.loop();
+            } else {
+                mCond.open();
+            }
+
+        }
+
+        public final TransportBrokerImpl getBroker() {
+            return _broker;
         }
     }
 
@@ -416,13 +524,13 @@ public class TransportManager extends TransportManagerBase{
                 contextWeakReference.get().registerReceiver(legacyDisconnectReceiver,new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED) );
             }
         }else{
-            new Handler().postDelayed(new Runnable() {
+            new Handler().post(new Runnable() {
                 @Override
                 public void run() {
                     transportListener.onError(info + " - Legacy mode unacceptable; shutting down.");
 
                 }
-            },500);
+            });
         }
     }
 

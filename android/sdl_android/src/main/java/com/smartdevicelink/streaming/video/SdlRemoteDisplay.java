@@ -98,11 +98,16 @@ public abstract class SdlRemoteDisplay extends Presentation {
             }
             if (mainView != null) {
                 mainView.invalidate();
+                onInvalidate(); // Xevo customize
             }
 
             handler.postDelayed(this, REFRESH_RATE_MS);
         }
     };
+
+    // Xevo customize
+    protected void onInvalidate() {
+    }
 
     @SuppressWarnings("unused")
     public View getMainView(){

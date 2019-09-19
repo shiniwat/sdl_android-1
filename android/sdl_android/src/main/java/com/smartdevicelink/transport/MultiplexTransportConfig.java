@@ -76,6 +76,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 	boolean requiresHighBandwidth = false;
 	Boolean requiresAudioSupport = null;
 	TransportListener transportListener;
+	boolean legacyModeAllowed = false; // disallow LegacyMode by default.
 
 	
 	public MultiplexTransportConfig(Context context, String appId) {
@@ -84,7 +85,6 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 		this.securityLevel = FLAG_MULTI_SECURITY_MED;
 		this.primaryTransports = Arrays.asList(TransportType.USB, TransportType.BLUETOOTH);
 		this.secondaryTransports = Arrays.asList(TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH);
-
 	}
 
 	public MultiplexTransportConfig(Context context, String appId, int securityLevel) {
@@ -93,7 +93,7 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 		this.securityLevel = securityLevel;
 		this.primaryTransports = Arrays.asList(TransportType.USB, TransportType.BLUETOOTH);
 		this.secondaryTransports = Arrays.asList(TransportType.TCP, TransportType.USB, TransportType.BLUETOOTH);
-	}	
+	}
 
 	/**
 	 * Overridden abstract method which returns specific type of this transport configuration.
@@ -261,6 +261,22 @@ public class MultiplexTransportConfig extends BaseTransportConfig{
 	 */
 	public TransportListener getTransportListener(){
 		return this.transportListener;
+	}
+
+	/**
+	 * Some apps never want to use legacy mode. This allows to do so.
+	 * @param legacyModeAllowed
+	 */
+	public void setLegacyModeAllowed(boolean legacyModeAllowed) {
+		this.legacyModeAllowed = legacyModeAllowed;
+	}
+
+	/**
+	 * getLegacyModeAllowed (getter)
+	 * @return
+	 */
+	public boolean getLegacyModeAllowed() {
+		return this.legacyModeAllowed;
 	}
 
 	/**

@@ -36,6 +36,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
+import com.smartdevicelink.localdebug.DebugConst;
 import com.smartdevicelink.protocol.ISdlProtocol;
 import com.smartdevicelink.protocol.ProtocolMessage;
 import com.smartdevicelink.protocol.SdlPacket;
@@ -129,6 +130,7 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
             sdlSecurity.shutDown();
         }
         if(sdlProtocol != null){
+            DebugConst.log(TAG, "endSession for sessionId=" + sessionId);
             sdlProtocol.endSession(sessionId, sessionHashId);
         }
     }
@@ -251,6 +253,12 @@ public class SdlSession2 extends SdlSession implements ISdlProtocol{
                 listener.onServiceError(this, sessionType, "Start "+ sessionType.toString() +" Service NAKed");
             }
         }
+    }
+
+    @Override
+    public void onProtocolSessionStarted(SessionType sessionType, byte sessionID, byte version, String correlationID, int hashID, boolean isEncrypted) {
+        super.onProtocolSessionStarted(sessionType, sessionID, version, correlationID, hashID, isEncrypted);
+        this.sdlProtocol.setProtocolSessionStarted(true);
     }
 
     /* Not supported methods from IProtocolListener */

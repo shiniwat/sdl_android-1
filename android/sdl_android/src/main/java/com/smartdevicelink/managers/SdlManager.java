@@ -35,8 +35,8 @@ package com.smartdevicelink.managers;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import android.util.Log;
 
 import com.smartdevicelink.exception.SdlException;
@@ -97,6 +97,7 @@ import java.util.Vector;
  * This is the main point of contact between an application and SDL <br>
  *
  * It is broken down to these areas: <br>
+ * It is broken down to these areas: <br>
  *
  * 1. SDLManagerBuilder <br>
  * 2. ISdl Interface along with its overridden methods - This can be passed into attached managers <br>
@@ -131,12 +132,13 @@ public class SdlManager extends BaseSdlManager{
 
 		@Override
 		public void onProxyClosed(String info, Exception e, SdlDisconnectedReason reason){
+			Log.e(TAG, "onProxyClosed: info=" + info);
 			dispose();
 		}
 
 		@Override
 		public void onServiceEnded(OnServiceEnded serviceEnded){
-
+			Log.e(TAG, "onServiceEnded: " + serviceEnded.getSessionType().getName());
 		}
 
 		@Override
@@ -146,7 +148,7 @@ public class SdlManager extends BaseSdlManager{
 
 		@Override
 		public void onError(String info, Exception e){
-
+			Log.e(TAG, "onError info=" + info);
 		}
 	});
 
@@ -226,7 +228,7 @@ public class SdlManager extends BaseSdlManager{
 	}
 
 	@Override
-	protected void initialize(){
+	public void initialize(){
 		// Instantiate sub managers
 		this.permissionManager = new PermissionManager(_internalInterface);
 		this.fileManager = new FileManager(_internalInterface, context);
@@ -556,6 +558,11 @@ public class SdlManager extends BaseSdlManager{
 	@SuppressWarnings("unchecked")
 	@Override
 	public void start(){
+		start(null);
+	}
+
+	// overrode versiom
+	public void start(ProxyBridge bridge) {
 		if (proxy == null) {
 			try {
 				if(transport!= null  && transport.getTransportType() == TransportType.MULTIPLEX){
@@ -588,7 +595,7 @@ public class SdlManager extends BaseSdlManager{
 					}
 				}
 
-				proxy = new SdlProxyBase(proxyBridge, context, appName, shortAppName, isMediaApp, hmiLanguage,
+				proxy = new SdlProxyBase((bridge != null)? bridge : proxyBridge, context, appName, shortAppName, isMediaApp, hmiLanguage,
 						hmiLanguage, hmiTypes, appId, transport, vrSynonyms, ttsChunks, dayColorScheme,
 						nightColorScheme) {};
 				proxy.setMinimumProtocolVersion(minimumProtocolVersion);

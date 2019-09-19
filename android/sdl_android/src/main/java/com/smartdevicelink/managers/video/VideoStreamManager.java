@@ -246,10 +246,11 @@ public class VideoStreamManager extends BaseVideoStreamManager {
 		this.remoteDisplayClass = remoteDisplayClass;
 		int majorProtocolVersion = internalInterface.getProtocolVersion().getMajor();
 		if(majorProtocolVersion >= 5 && !internalInterface.isCapabilitySupported(SystemCapabilityType.VIDEO_STREAMING)){
-			Log.e(TAG, "Video streaming not supported on this module");
+			Log.e(TAG, "Video streaming not supported on this module; majorProtocolVersion = " + majorProtocolVersion);
 			stateMachine.transitionToState(StreamingStateMachine.ERROR);
 			return;
 		}
+		Log.d(TAG, "about starting RemoteDisplayStream");
 		if(parameters == null){
 			if(majorProtocolVersion >= 5) {
 				internalInterface.getCapability(SystemCapabilityType.VIDEO_STREAMING, new OnSystemCapabilityListener() {
