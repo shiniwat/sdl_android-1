@@ -98,8 +98,6 @@ public class TransportConstants {
 	public static final String SDL_NOTIFICATION_CHANNEL_NAME 					= "SmartDeviceLink";
 
 
-
-
 	/**
 	 * This class houses all important router service versions
 	 */

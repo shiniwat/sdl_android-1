@@ -40,6 +40,7 @@ public abstract class BaseTransportConfig {
 	
 	protected boolean shareConnection = true;
 	protected int iHeartBeatTimeout = Integer.MAX_VALUE;
+	protected boolean enableAutoRecycle = true;
 	/**
 	 * Gets transport type for this transport configuration.
 	 * 
@@ -64,5 +65,13 @@ public abstract class BaseTransportConfig {
 	
 	public void setHeartBeatTimeout(int iTimeout) {
 		iHeartBeatTimeout = iTimeout;
-	}	
+	}
+
+	public boolean isAutoRecycleEnabled() {
+		return enableAutoRecycle;
+	}
+
+	public void setEnableAutoRecycle(boolean enable) {
+		enableAutoRecycle = enable;
+	}
 }

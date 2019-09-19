@@ -31,7 +31,7 @@
  */
 package com.smartdevicelink.proxy.rpc;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.proxy.RPCNotification;
@@ -138,7 +138,7 @@ public class OnHMIStatus extends RPCNotification {
 
     @Override
     public void format(com.smartdevicelink.util.Version rpcVersion, boolean formatParams){
-        if(rpcVersion.getMajor() < 5){
+        if(rpcVersion != null && rpcVersion.getMajor() < 5){
             if(getVideoStreamingState() == null){
                 setVideoStreamingState(VideoStreamingState.STREAMABLE);
             }

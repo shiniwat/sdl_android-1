@@ -68,5 +68,7 @@ public interface ISdlConnectionListener {
 	
 	void onProtocolServiceDataACK(SessionType sessionType, int dataSize, byte sessionID);
 
+	void onProtocolSessionStartFailed(SessionType sessionType);
+
 	void onAuthTokenReceived(String authToken, byte sessionID);
 }

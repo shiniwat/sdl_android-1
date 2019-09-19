@@ -33,7 +33,7 @@
 package com.smartdevicelink.managers.file;
 
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.util.Log;
 
 import com.smartdevicelink.managers.BaseSubManager;

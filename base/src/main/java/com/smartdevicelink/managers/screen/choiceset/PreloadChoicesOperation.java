@@ -35,7 +35,7 @@
 
 package com.smartdevicelink.managers.screen.choiceset;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import com.smartdevicelink.managers.CompletionListener;
 import com.smartdevicelink.managers.file.FileManager;

@@ -72,4 +72,6 @@ public interface IProtocolListener {
 	// Called to indicate that a protocol error was detected in received data.
 	void onProtocolError(String info, Exception e);
 
+	void onProtocolSessionStartFailed(SessionType sessionType);
+
 } // end-interfCe

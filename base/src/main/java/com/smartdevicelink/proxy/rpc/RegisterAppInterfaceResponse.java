@@ -31,7 +31,7 @@
  */
 package com.smartdevicelink.proxy.rpc;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.proxy.RPCResponse;
@@ -251,7 +251,11 @@ public class RegisterAppInterfaceResponse extends RPCResponse {
 	 */
     @SuppressWarnings("unchecked")
     public List<SoftButtonCapabilities> getSoftButtonCapabilities() {
-		return (List<SoftButtonCapabilities>) getObject(SoftButtonCapabilities.class, KEY_SOFT_BUTTON_CAPABILITIES);
+		if (getObject(SoftButtonCapabilities.class, KEY_SOFT_BUTTON_CAPABILITIES) instanceof List) {
+			return (List<SoftButtonCapabilities>) getObject(SoftButtonCapabilities.class, KEY_SOFT_BUTTON_CAPABILITIES);
+		} else {
+			return null;
+		}
     }
     /**
      * Sets softButtonCapabilities
