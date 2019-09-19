@@ -23,6 +23,7 @@ import com.smartdevicelink.proxy.rpc.enums.HMILevel;
 import com.smartdevicelink.proxy.rpc.enums.SystemCapabilityType;
 import com.smartdevicelink.proxy.rpc.enums.TouchType;
 import com.smartdevicelink.proxy.rpc.listeners.OnRPCNotificationListener;
+import com.smartdevicelink.proxy.rpc.TouchCoord;
 import com.smartdevicelink.streaming.video.SdlRemoteDisplay;
 import com.smartdevicelink.streaming.video.VideoStreamingParameters;
 import com.smartdevicelink.test.Test;
@@ -38,6 +39,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;

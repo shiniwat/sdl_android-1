@@ -84,6 +84,8 @@ public class SdlProtocolTests  extends AndroidTestCase2 {
         public void stopStream(SessionType serviceType) {}
         @Override
         public void onAuthTokenReceived(String token){}
+        @Override
+        public void onProtocolSessionStartFailed(SessionType sessionType) {}
     };
 
     DidReceiveListener onProtocolMessageReceivedListener = new DidReceiveListener();

@@ -113,6 +113,10 @@ public class SdlSecurityBaseTest extends AndroidTestCase2 {
 		}
 		@Override
 		public void onAuthTokenReceived(String token, byte bytes){}
+		@Override
+		public void onProtocolSessionStartFailed(SessionType sessiontype) {
+
+		}
 
 	}
 	
