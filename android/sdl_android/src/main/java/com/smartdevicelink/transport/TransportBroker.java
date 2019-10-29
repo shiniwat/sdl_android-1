@@ -56,6 +56,7 @@ import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
 import com.smartdevicelink.transport.utl.ByteArrayMessageSpliter;
 import com.smartdevicelink.transport.utl.TransportRecord;
+import com.smartdevicelink.util.DebugTool;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -143,7 +144,6 @@ public class TransportBroker {
                 Log.d(TAG, "Unbound from service " + className.getClassName());
                 routerServiceMessenger = null;
                 registeredWithRouterService = false;
-                unBindFromRouterService();
                 isBound = false;
                 onHardwareDisconnected(null, null);
             }
@@ -169,7 +169,7 @@ public class TransportBroker {
                 } catch (RemoteException e) {
                     e.printStackTrace();
                     //Let's check to see if we should retry
-                    if (e instanceof TransactionTooLargeException
+                    if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1 && e instanceof TransactionTooLargeException )
                             || (retryCount < 5 && routerServiceMessenger.getBinder().isBinderAlive() && routerServiceMessenger.getBinder().pingBinder())) { //We probably just failed on a small transaction =\
                         try {
                             Thread.sleep(100);
@@ -182,6 +182,7 @@ public class TransportBroker {
                         Log.d(TAG, "Dead object while attempting to send packet");
                         routerServiceMessenger = null;
                         registeredWithRouterService = false;
+                        unBindFromRouterService();
                         isBound = false;
                         onHardwareDisconnected(null, null);
                         return false;
@@ -190,6 +191,7 @@ public class TransportBroker {
                     Log.d(TAG, "Null messenger while attempting to send packet"); // NPE, routerServiceMessenger is null
                     routerServiceMessenger = null;
                     registeredWithRouterService = false;
+                    unBindFromRouterService();
                     isBound = false;
                     onHardwareDisconnected(null, null);
                     return false;
@@ -288,6 +290,10 @@ public class TransportBroker {
 
                     break;
                 case TransportConstants.ROUTER_RECEIVED_PACKET:
+                    if(bundle == null){
+                        DebugTool.logWarning("Received packet message from router service with no bundle");
+                        return;
+                    }
                     //So the intent has a packet with it. PEFRECT! Let's send it through the library
                     int flags = bundle.getInt(TransportConstants.BYTES_TO_SEND_FLAGS, TransportConstants.BYTES_TO_SEND_FLAG_NONE);
 
@@ -342,6 +348,10 @@ public class TransportBroker {
                     }
                     break;
                 case TransportConstants.HARDWARE_CONNECTION_EVENT:
+                    if(bundle == null){
+                        DebugTool.logWarning("Received hardware connection message from router service with no bundle");
+                        return;
+                    }
                     if (bundle.containsKey(TransportConstants.TRANSPORT_DISCONNECTED)
                             || bundle.containsKey(TransportConstants.HARDWARE_DISCONNECTED)) {
                         //We should shut down, so call
@@ -472,7 +482,7 @@ public class TransportBroker {
      * This method will end our communication with the router service.
      */
     public void stop() {
-        //Log.d(TAG, "STOPPING transport broker for " + whereToReply);
+        DebugTool.logInfo("Stopping transport broker for " + whereToReply);
         synchronized (INIT_LOCK) {
             unregisterWithRouterService();
             unBindFromRouterService();
@@ -485,15 +495,13 @@ public class TransportBroker {
 
     private synchronized void unBindFromRouterService() {
         try {
-            if (isBound && getContext() != null && routerConnection != null) {
-                getContext().unbindService(routerConnection);
-                isBound = false;
-            } else {
-                Log.w(TAG, "Unable to unbind from router service. bound? " + isBound + " context? " + (getContext()!=null) + " router connection?" + (routerConnection != null));
-            }
+            getContext().unbindService(routerConnection);
 
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             //This is ok
+             Log.w(TAG, "Unable to unbind from router service. bound? " + isBound + " context? " + (getContext()!=null) + " router connection?" + (routerConnection != null));
+        }finally {
+            isBound = false;
         }
     }
 

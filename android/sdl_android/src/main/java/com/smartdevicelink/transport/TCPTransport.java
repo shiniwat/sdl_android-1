@@ -32,18 +32,15 @@
 package com.smartdevicelink.transport;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.concurrent.LinkedBlockingDeque;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -141,11 +138,10 @@ public class TCPTransport extends SdlTransport {
 
     /**
      * Performs actual work of sending array of bytes over the transport
-     * @param msgBytes Bytes to send
-     * @param offset Offset in the bytes array to send data from
-     * @param length Number of bytes to send
+     * @param packet The SdlPacket that should be sent over the transport
      * @return True if data was sent successfully, False otherwise
      */
+    @SuppressLint("DefaultLocale")
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     @Override
     protected boolean sendBytesOverTransport(SdlPacket packet) {
@@ -353,6 +349,7 @@ public class TCPTransport extends SdlTransport {
          *
          * @return true if connection established and false otherwise
          */
+        @SuppressLint("DefaultLocale")
         private boolean connect() {
             boolean bConnected;
             int remainingRetry = RECONNECT_RETRY_COUNT;

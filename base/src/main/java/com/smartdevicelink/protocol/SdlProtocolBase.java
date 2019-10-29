@@ -182,13 +182,16 @@ public class SdlProtocolBase {
      * @return the max transfer unit
      */
     public int getMtu(){
-        return mtus.get(SessionType.RPC).intValue();
+        return Long.valueOf(getMtu(SessionType.RPC)).intValue();
     }
 
     public long getMtu(SessionType type){
         Long mtu = mtus.get(type);
-        if(mtu == null){
+        if (mtu == null) {
             mtu = mtus.get(SessionType.RPC);
+        }
+        if (mtu == null) { //If MTU is still null, use the oldest/smallest
+            mtu = (long) V1_V2_MTU_SIZE;
         }
         return mtu;
     }
@@ -317,13 +320,16 @@ public class SdlProtocolBase {
                         // If this service type has extra information from the RPC StartServiceACK
                         // parse through it to find which transport should be used to start this
                         // specific service type
-                        for(int transportNum : transportPriorityForServiceMap.get(secondaryService)){
-                            if(transportNum == PRIMARY_TRANSPORT_ID){
-                                break; // Primary is favored for this service type, break out...
-                            }else if(transportNum == SECONDARY_TRANSPORT_ID){
-                                // The secondary transport can be used to start this service
-                                activeTransports.put(secondaryService, transportRecord);
-                                break;
+                        List<Integer> transportNumList = transportPriorityForServiceMap.get(secondaryService);
+                        if (transportNumList != null){
+                            for (int transportNum : transportNumList) {
+                                if (transportNum == PRIMARY_TRANSPORT_ID) {
+                                    break; // Primary is favored for this service type, break out...
+                                } else if (transportNum == SECONDARY_TRANSPORT_ID) {
+                                    // The secondary transport can be used to start this service
+                                    activeTransports.put(secondaryService, transportRecord);
+                                    break;
+                                }
                             }
                         }
                     }
@@ -543,6 +549,10 @@ public class SdlProtocolBase {
         SdlPacket header = getEndSessionPacket(SessionType.RPC, sessionID, hashId);
         DebugConst.log(TAG, "about endSession for " + sessionID);
         handlePacketToSend(header);
+        if(transportManager != null) {
+            transportManager.close(sessionID);
+        }
+
     } // end-method
 
     private SdlPacket getEndSessionPacket(SessionType sessionType, byte sessionID, int hashId) {
@@ -623,7 +633,7 @@ public class SdlProtocolBase {
         }
 
         synchronized(messageLock) {
-            if (data.length > getMtu(sessionType)) {
+            if (data != null && data.length > getMtu(sessionType)) {
 
                 messageID++;
 
@@ -1021,7 +1031,8 @@ public class SdlProtocolBase {
                         notifyDevTransportListener();
 
                     } else {
-                        Log.w(TAG, "Received a start service ack for RPC service while already active on a different transport.");
+                        DebugTool.logInfo("Received a start service ack for RPC service while already active on a different transport.");
+                        iSdlProtocol.onProtocolSessionStarted(serviceType, (byte) packet.getSessionId(), (byte)protocolVersion.getMajor(), "", hashID, packet.isEncrypted());
                         return;
                     }
 
