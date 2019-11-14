@@ -212,6 +212,9 @@ public class VirtualDisplayEncoder {
 
                     int callCount = 0;
                     int totalDataSize = 0;
+                    long startTime = System.currentTimeMillis();
+                    long lastTime = startTime;
+                    int lastCount = callCount;
 
                     @Override
                     public void onInputBufferAvailable(MediaCodec codec, int index) {
@@ -225,8 +228,13 @@ public class VirtualDisplayEncoder {
                             totalDataSize = 0;
                             DebugConst.totalDataSize(0);
                         }
-                        if (callCount % 1000 == 0) {
-                            DebugConst.log(TAG, "onOutputBufferAvailable /callCount:" + callCount);
+                        if (callCount % 500 == 0) {
+                            long current = System.currentTimeMillis();
+                            long duration = (current - lastTime) / 1000;
+                            lastTime = current;
+                            double fps = (double)(callCount - lastCount) / (double)duration;
+                            DebugConst.log(TAG, "onOutputBufferAvailable /callCount:" + callCount + "; call/sec:" + fps);
+                            lastCount = callCount;
                         }
                         callCount++;
                          try {
