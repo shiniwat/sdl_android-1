@@ -170,7 +170,7 @@ public class TransportBroker {
                     e.printStackTrace();
                     //Let's check to see if we should retry
                     if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1 && e instanceof TransactionTooLargeException )
-                            || (retryCount < 5 && routerServiceMessenger.getBinder().isBinderAlive() && routerServiceMessenger.getBinder().pingBinder())) { //We probably just failed on a small transaction =\
+                            || (retryCount < 5 && routerServiceMessenger.getBinder() != null && routerServiceMessenger.getBinder().isBinderAlive() && routerServiceMessenger.getBinder().pingBinder())) { //We probably just failed on a small transaction =\
                         try {
                             Thread.sleep(100);
                         } catch (InterruptedException e1) {
