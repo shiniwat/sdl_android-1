@@ -31,7 +31,7 @@
  */
 package com.smartdevicelink.proxy.rpc;
 
-import android.support.annotation.NonNull;
+import aandroidx.annotation.NonNull;
 
 import com.smartdevicelink.proxy.RPCStruct;
 
