@@ -65,9 +65,13 @@ public class TCPTransportManager extends TransportManagerBase{
     @Override
     public void sendPacket(SdlPacket packet) {
         if(packet != null){
-            byte[] rawBytes = packet.constructPacket();
-            if(rawBytes != null && rawBytes.length >0){
-                transport.write(rawBytes, 0, rawBytes.length);
+            if (transport.isUseTransportThread2()) {
+                transport.write(packet);
+            } else{
+                byte[] rawBytes = packet.constructPacket();
+                if (rawBytes != null && rawBytes.length > 0) {
+                    transport.write(rawBytes, 0, rawBytes.length);
+                }
             }
         }
 
