@@ -105,14 +105,15 @@ public class TransportManager extends TransportManagerBase{
     }
 
     /**
-     * start is now synonym of startValidate, and transport.start gets called in startTransport.
+     * start internally validates the target ROuterService, which was done in ctor before.
      */
+    @Override
     public void start() {
         final RouterServiceValidator validator = new RouterServiceValidator(mConfig);
         validator.validateAsync(new RouterServiceValidator.ValidationStatusCallback() {
             @Override
             public void onFinishedValidation(boolean valid, ComponentName name) {
-                Log.d(TAG, "onFinishedValidation valid=" + valid + "; name=" + ((name == null)? "null" : name.getPackageName()));
+                DebugTool.logInfo("onFinishedValidation valid=" + valid + "; name=" + ((name == null)? "null" : name.getPackageName()));
                 if (valid) {
                     ConditionVariable cond = new ConditionVariable();
                     mConfig.service = name;
@@ -121,7 +122,7 @@ public class TransportManager extends TransportManagerBase{
                         _brokerThread.start();
                         cond.block();
                         transport = _brokerThread.getBroker();
-                        Log.d(TAG, "TransportManager start got called; transport=" + transport);
+                        DebugTool.logInfo("TransportManager start got called; transport=" + transport);
                         if(transport != null){
                             transport.start();
                         }else if(legacyBluetoothTransport != null){

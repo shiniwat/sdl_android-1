@@ -65,6 +65,7 @@ import android.os.Looper;
 import android.util.Log;
 
 import com.smartdevicelink.util.AndroidTools;
+import com.smartdevicelink.util.DebugTool;
 import com.smartdevicelink.util.HttpRequestTask;
 import com.smartdevicelink.util.HttpRequestTask.HttpRequestTaskCallback;
 import com.smartdevicelink.util.ServiceFinder;
@@ -80,6 +81,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Vector;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class will tell us if the currently running router service is valid or not.
@@ -197,7 +203,7 @@ public class RouterServiceValidator {
 		setSecurityLevel(config.securityLevel);
 		inDebugMode = inDebugMode();
 	}
-	
+
 	/**
 	 * Main function to call to ensure we are connecting to a validated router service
 	 * @return whether or not the currently running router service can be trusted.
@@ -205,6 +211,7 @@ public class RouterServiceValidator {
 	 * Due to SDL 0220 proposal, we should use validateAsync always.
 	 * This function remains only for backward compatibility.
 	 */
+	@Deprecated
 	public boolean validate(){
 
 		if(securityLevel == -1){
@@ -257,104 +264,6 @@ public class RouterServiceValidator {
 		//TODO spin up a known good router service
 		wakeUpRouterServices();
 		return false;
-	}
-
-	public void validateAsync(final ValidationStatusCallback callback) {
-		if(securityLevel == -1){
-			securityLevel = getSecurityLevel(context);
-		}
-
-		final PackageManager pm = context.getPackageManager();
-		//Grab the package for the currently running router service. We need this call regardless of if we are in debug mode or not.
-
-		if(this.service != null){
-			Log.i(TAG, "Supplied service name of " + this.service.getClassName());
-			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isServiceRunning(context,this.service)){
-				//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
-				service = null;
-				Log.w(TAG, "Supplied service is not actually running.");
-			} else {
-				// If the running router service is created by this app, the validation is good by default
-				if (this.service.getPackageName().equals(context.getPackageName()) && callback != null) {
-					callback.onFinishedValidation(true, this.service);
-					return;
-				}
-			}
-		}
-
-		if(this.service == null){
-			Log.d(TAG, "about finding the best Router by using retrieveBestRouterServiceName");
-			new FindRouterTask(new FindConnectedRouterCallback() {
-				@Override
-				public void onFound(ComponentName component) {
-					Log.d(TAG, "FindConnectedRouterCallback.onFound got called. Package=" + component);
-					checkTrustedRouter(callback, pm, component);
-				}
-
-				@Override
-				public void onFailed() {
-					Log.d(TAG, "FindConnectedRouterCallback.onFailed was called");
-					if (callback != null) {
-						callback.onFinishedValidation(false, null);
-					}
-				}
-			}).execute(this.context);
-		} else {
-			// already found the RouterService
-			checkTrustedRouter(callback, pm, service);
-		}
-
-	}
-
-	/**
-	 * checkTrustedRouter: This checks to see if the given component is Trusted RouterService,
-	 * and calls ValidationStatusCallback#onFinishedValidation.
-	 *
-	 * @param callback
-	 * @param pm
-	 * @param component
-	 */
-	private void checkTrustedRouter(final ValidationStatusCallback callback, final PackageManager pm, final ComponentName component) {
-		String packageName = appPackageForComponentName(component, pm);
-		boolean valid = false;
-
-		if(packageName!=null){//Make sure there is a service running
-			if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
-				if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
-					valid = true;
-				} else {
-					Log.e(TAG, "the package=" + packageName + " is not trusted; and failed to validate");
-				}
-			} else {
-				Log.e(TAG, "the package=" + packageName + " is not installed by AppStore");
-				// let's doing trusted check anyway.
-				if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
-					valid = true;
-				} else {
-					Log.e(TAG, "the package=" + packageName + " is not trusted; and failed to validate");
-				}
-			}
-		}
-		if (callback != null) {
-			callback.onFinishedValidation(valid, component);
-			if (valid) {
-				synchronized (this) {
-					this.service = component;
-				}
-			} else {
-				// make sure we clear up the Preference
-				ServiceNameHolder serviceNameHolder = new ServiceNameHolder(this.context);
-				serviceNameHolder.clear();
-			}
-		}
-	}
-	/**
-	 * This method retrieves the best routerservice name asynchronously.
-	 * @param context
-	 */
-	private void retrieveBestRouterServiceName(Context context) {
-		FindRouterTask task = new FindRouterTask(null);
-		task.execute(context);
 	}
 
 	/**
@@ -430,15 +339,13 @@ public class RouterServiceValidator {
 		}
 
 		@Override
-		@TargetApi(9)
 		protected void onPostExecute(ComponentName componentName) {
-			Log.d(TAG, "onPostExecute componentName=" + componentName);
+			DebugTool.logInfo("onPostExecute componentName=" + componentName);
 			super.onPostExecute(componentName);
 			if (mCallback != null) {
-				if (componentName != null && componentName.getPackageName() != null && !componentName.getPackageName().isEmpty()) {
+				if (componentName != null && componentName.getPackageName() != null && componentName.getPackageName().length() != 0) {
 					mCallback.onFound(componentName);
 				} else {
-
 					mCallback.onFailed();
 				}
 			}
@@ -511,6 +418,94 @@ public class RouterServiceValidator {
 	}
 
 	/**
+	 * Asynchronously validate the target RouterService, which includes finding the right RouterService.
+	 * @param callback: callback gets called when validation finishes.
+	 */
+	public void validateAsync(final ValidationStatusCallback callback) {
+		if(securityLevel == -1){
+			securityLevel = getSecurityLevel(context);
+		}
+
+		final PackageManager pm = context.getPackageManager();
+		//Grab the package for the currently running router service. We need this call regardless of if we are in debug mode or not.
+
+		if(this.service != null){
+			DebugTool.logInfo("Supplied service name of " + this.service.getClassName());
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.O && !isServiceRunning(context,this.service)){
+				//This means our service isn't actually running, so set to null. Hopefully we can find a real router service after this.
+				service = null;
+				DebugTool.logWarning("Supplied service is not actually running.");
+			} else {
+				// If the running router service is created by this app, the validation is good by default
+				if (this.service.getPackageName().equals(context.getPackageName()) && callback != null) {
+					callback.onFinishedValidation(true, this.service);
+					return;
+				}
+			}
+		}
+
+		if(this.service == null){
+			DebugTool.logInfo("about finding the best Router by using retrieveBestRouterServiceName");
+			new FindRouterTask(new FindConnectedRouterCallback() {
+				@Override
+				public void onFound(ComponentName component) {
+					DebugTool.logInfo("FindConnectedRouterCallback.onFound got called. Package=" + component);
+					checkTrustedRouter(callback, pm, component);
+				}
+
+				@Override
+				public void onFailed() {
+					DebugTool.logInfo("FindConnectedRouterCallback.onFailed was called");
+					if (callback != null) {
+						callback.onFinishedValidation(false, null);
+					}
+				}
+			}).execute(this.context);
+		} else {
+			// already found the RouterService
+			checkTrustedRouter(callback, pm, service);
+		}
+
+	}
+
+	/**
+	 * checkTrustedRouter: This checks to see if the given component is Trusted RouterService,
+	 * and calls ValidationStatusCallback#onFinishedValidation.
+	 *
+	 * @param callback
+	 * @param pm
+	 * @param component
+	 */
+	private void checkTrustedRouter(final ValidationStatusCallback callback, final PackageManager pm, final ComponentName component) {
+		String packageName = appPackageForComponentName(component, pm);
+		boolean valid = (securityLevel == MultiplexTransportConfig.FLAG_MULTI_SECURITY_OFF);
+
+		if(!valid && packageName!=null){//Make sure there is a service running
+			if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
+				if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
+					valid = true;
+				}
+			}
+		}
+		if (callback != null) {
+			callback.onFinishedValidation(valid, component);
+			if (valid) {
+				synchronized (this) {
+					this.service = component;
+				}
+			}
+		}
+	}
+	/**
+	 * This method retrieves the best routerservice name asynchronously.
+	 * @param context
+	 */
+	private void retrieveBestRouterServiceName(Context context) {
+		FindRouterTask task = new FindRouterTask(null);
+		task.execute(context);
+	}
+
+	/**
 	 * FindConnectedRouterCallback
 	 * Used internally for validating router service.
 	 */
@@ -519,8 +514,8 @@ public class RouterServiceValidator {
 		void onFailed();
 	}
 
-	public interface ValidationStatusCallback {
-		public void onFinishedValidation(boolean valid, ComponentName name);
+	interface ValidationStatusCallback {
+		void onFinishedValidation(boolean valid, ComponentName name);
 	}
 
 	/**

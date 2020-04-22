@@ -466,8 +466,21 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 		}
 
 		@Override
+		public RegisterAppInterfaceResponse getRegisterAppInterfaceResponse() {
+			return SdlProxyBase.this.getRegisterAppInterfaceResponse();
+		}
+
+		@Override
 		public void getCapability(SystemCapabilityType systemCapabilityType, OnSystemCapabilityListener scListener) {
 			SdlProxyBase.this.getCapability(systemCapabilityType, scListener);
+		}
+
+		@Override
+		public Object getCapability(SystemCapabilityType systemCapabilityType, OnSystemCapabilityListener scListener, boolean forceUpdate) {
+			if (_systemCapabilityManager != null) {
+				return _systemCapabilityManager.getCapability(systemCapabilityType, scListener, forceUpdate);
+			}
+			return null;
 		}
 
 		@Override
@@ -6817,7 +6830,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 
 		DeviceInfo deviceInfo = new DeviceInfo();
 		deviceInfo.setHardware(android.os.Build.MODEL);
-		deviceInfo.setOs(DeviceInfo.DEVICE_OS);
+		deviceInfo.setOs("Android");
 		deviceInfo.setOsVersion(Build.VERSION.RELEASE);
 		deviceInfo.setCarrier(carrierName);
 
@@ -8464,7 +8477,7 @@ public abstract class SdlProxyBase<proxyListenerType extends IProxyListenerBase>
 				return;
 			}
 			VideoStreamingCapability capability = (VideoStreamingCapability)_systemCapabilityManager.getCapability(SystemCapabilityType.VIDEO_STREAMING);
-			if(capability != null && capability.getIsHapticSpatialDataSupported()){
+			if(capability != null && Boolean.TRUE.equals(capability.getIsHapticSpatialDataSupported())){
 				hapticManager = new HapticInterfaceManager(internalInterface);
 			}
 

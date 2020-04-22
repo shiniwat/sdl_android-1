@@ -141,7 +141,7 @@ public class SdlRouterStatusProvider {
 		bindingIntent.setAction( TransportConstants.BIND_REQUEST_TYPE_STATUS);
 		return context.bindService(bindingIntent, routerConnection, bindOnly? Context.BIND_NOT_FOREGROUND : Context.BIND_AUTO_CREATE);
 	}
-	
+
 	private void unBindFromService(){
 		try{
 			if(context!=null && routerConnection!=null){

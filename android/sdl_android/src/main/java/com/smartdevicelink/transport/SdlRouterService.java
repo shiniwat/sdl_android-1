@@ -96,6 +96,7 @@ import android.os.Parcelable;
 import android.os.RemoteException;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
+import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
@@ -163,7 +164,7 @@ public class SdlRouterService extends Service{
 	/**
 	 * <b> NOTE: DO NOT MODIFY THIS UNLESS YOU KNOW WHAT YOU'RE DOING.</b>
 	 */
-	protected static final int ROUTER_SERVICE_VERSION_NUMBER = 10;
+	protected static final int ROUTER_SERVICE_VERSION_NUMBER = 11;
 
 	
 	private static final String ROUTER_SERVICE_PROCESS = "com.smartdevicelink.router";
@@ -1454,6 +1455,7 @@ public class SdlRouterService extends Service{
 				// If this is the first time the service has ever connected to this device we want
 				// to ensure we have a record of it
 				setSDLConnectedStatus(address, false);
+				return FOREGROUND_TIMEOUT;
 			}
 		}
 		// If this is a new device or hasn't connected through SDL we want to limit the exposure
@@ -1552,8 +1554,9 @@ public class SdlRouterService extends Service{
 		PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
 		builder.setContentIntent(pendingIntent);
 
-        if(chronometerLength > 0 && android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        if(chronometerLength > (FOREGROUND_TIMEOUT/1000) && android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         	//The countdown method is only available in SDKs >= 24
+        	// Only add countdown if it is over the min timeout
         	builder.setWhen(chronometerLength + System.currentTimeMillis());
         	builder.setUsesChronometer(true);
         	builder.setChronometerCountDown(true);
@@ -1628,7 +1631,23 @@ public class SdlRouterService extends Service{
 	private void exitForeground(){
 		synchronized (NOTIFICATION_LOCK) {
 			if (isForeground && !isPrimaryTransportConnected()) {	//Ensure that the service is in the foreground and no longer connected to a transport
-				this.stopForeground(true);
+				DebugTool.logInfo("SdlRouterService to exit foreground");
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+					this.stopForeground(Service.STOP_FOREGROUND_DETACH);
+				}else{
+					stopForeground(false);
+				}
+				NotificationManager notificationManager = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+				if (notificationManager!= null){
+					try {
+						notificationManager.cancelAll();
+						if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+							notificationManager.deleteNotificationChannel(SDL_NOTIFICATION_CHANNEL_ID);
+						}
+					} catch (Exception e) {
+						DebugTool.logError("Issue when removing notification and channel", e);
+					}
+				}
 				isForeground = false;
 			}
 		}
