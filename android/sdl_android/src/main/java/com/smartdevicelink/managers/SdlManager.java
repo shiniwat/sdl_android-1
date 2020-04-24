@@ -310,6 +310,11 @@ public class SdlManager extends BaseSdlManager{
 
 	@Override
 	public void initialize(){
+		Log.w(TAG, "SdlManager.initialize gets called");
+		if (this.permissionManager != null) {
+			Log.e(TAG, "Already initialized");
+			return;
+		}
 		// Instantiate sub managers
 		this.permissionManager = new PermissionManager(_internalInterface);
 		this.fileManager = new FileManager(_internalInterface, context, fileManagerConfig);

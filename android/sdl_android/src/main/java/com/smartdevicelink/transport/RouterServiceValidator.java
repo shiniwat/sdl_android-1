@@ -480,9 +480,17 @@ public class RouterServiceValidator {
 		String packageName = appPackageForComponentName(component, pm);
 		boolean valid = (securityLevel == MultiplexTransportConfig.FLAG_MULTI_SECURITY_OFF);
 
+		Log.d(TAG, "enter checkTrustedRouter package name=" + packageName);
 		if(!valid && packageName!=null){//Make sure there is a service running
 			if(wasInstalledByAppStore(packageName)){ //Was this package installed from a trusted app store
 				if( isTrustedPackage(packageName, pm)){//Is this package on the list of trusted apps.
+					valid = true;
+				} else {
+					Log.e(TAG, packageName + " is not trusted RouterService in checkTrustedRouter");
+				}
+			} else {
+				Log.d(TAG, "not installed by PlayStore, but let's check anyway.");
+				if( isTrustedPackage(packageName, pm)) {//Is this package on the list of trusted apps.
 					valid = true;
 				}
 			}
