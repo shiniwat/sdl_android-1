@@ -79,14 +79,14 @@ public class MultiplexTcpTransport extends MultiplexBaseTransport {
 	private Socket mSocket = null;
 	private InputStream mInputStream = null;
 	private OutputStream mOutputStream = null;
-	//private MultiplexTcpTransport.TcpTransportThread mThread = null;
+	//private MultiplexTcpTransport.TcpTransportThread mThread = null; // uncomment if useTransportThread2 = false
 	private WriterThread writerThread;
 	/* [shiniwa] unneeded stuff end --- */
 	private Context mContext;
 
 	/* [shiniwa] TCPTrans[prtThread2 stuff ---*/
 	SocketChannel mChannel;
-	private TCPTransportThread2 mThread;
+	private TCPTransportThread2 mThread; // comment out if useTransportThread2 = false
 	private TCPTransportConfig mConfig;
 	public final boolean useTransportThread2 = true;
 
@@ -635,7 +635,9 @@ public class MultiplexTcpTransport extends MultiplexBaseTransport {
 					Log.d(TAG, "TCPTransport.read:" + bytesRead);
 				}
 			} catch (IOException e) {
-				Log.e(TAG, e.getMessage());
+				if (e != null) {
+					Log.e(TAG, e.getMessage());
+				}
 				internalHandleStreamReadError();
 				//break;
 			}

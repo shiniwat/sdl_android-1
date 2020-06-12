@@ -98,6 +98,17 @@ public class TCPTransportManager extends TransportManagerBase{
                 case SdlRouterService.MESSAGE_STATE_CHANGE:
                     switch (msg.arg1) {
                         case MultiplexBaseTransport.STATE_CONNECTED:
+                            boolean tcpConnectedAlready = false;
+                            for (TransportRecord record: service.transportStatus) {
+                                if (record.getType() == TransportType.TCP) {
+                                    tcpConnectedAlready = true;
+                                    break;
+                                }
+                            }
+                            if (tcpConnectedAlready) {
+                                Log.e(TAG, "TCP transport is connected already. Ignore for now");
+                                break;
+                            }
                             synchronized (service.TRANSPORT_STATUS_LOCK){
                                 service.transportStatus.clear();
                                 service.transportStatus.add(service.transport.getTransportRecord());
