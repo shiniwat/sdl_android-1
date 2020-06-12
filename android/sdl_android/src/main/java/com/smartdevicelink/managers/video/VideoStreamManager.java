@@ -228,6 +228,7 @@ public class VideoStreamManager extends BaseVideoStreamManager {
 				public void onCapabilityRetrieved(Object capability) {
 					VideoStreamingParameters params = new VideoStreamingParameters();
 					params.update((VideoStreamingCapability)capability, vehicleMake);	//Streaming parameters are ready time to stream
+					DebugTool.logInfo("onCapabilityRetrieved: framerate=" + params.getFrameRate());
 					VideoStreamManager.this.parameters = params;
 
 					checkState();

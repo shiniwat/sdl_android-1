@@ -32,6 +32,8 @@
 
 package com.smartdevicelink.streaming.video;
 
+import android.util.Log;
+
 import com.smartdevicelink.proxy.rpc.ImageResolution;
 import com.smartdevicelink.proxy.rpc.VideoStreamingCapability;
 import com.smartdevicelink.proxy.rpc.VideoStreamingFormat;
@@ -151,6 +153,9 @@ public class VideoStreamingParameters {
             if(resolution.getResolutionHeight()!=null && resolution.getResolutionHeight() > 0){ this.resolution.setResolutionHeight((int)(resolution.getResolutionHeight() / scale)); }
             if(resolution.getResolutionWidth()!=null && resolution.getResolutionWidth() > 0){ this.resolution.setResolutionWidth((int)(resolution.getResolutionWidth() / scale)); }
         }
+        if (capability.getPreferredFPS() != null) {
+            frameRate = capability.getPreferredFPS();
+        }
 
         // This should be the last call as it will return out once a suitable format is found
         final List<VideoStreamingFormat> formats = capability.getSupportedFormats();
@@ -168,7 +173,6 @@ public class VideoStreamingParameters {
             //TODO In the future we should set format to null, but might be a breaking change
             // For now, format will remain whatever was set prior to this update
         }
-
     }
 
     /**
@@ -188,6 +192,9 @@ public class VideoStreamingParameters {
 
             if(resolution.getResolutionHeight()!=null && resolution.getResolutionHeight() > 0){ this.resolution.setResolutionHeight((int)(resolution.getResolutionHeight() / scale)); }
             if(resolution.getResolutionWidth()!=null && resolution.getResolutionWidth() > 0){ this.resolution.setResolutionWidth((int)(resolution.getResolutionWidth() / scale)); }
+        }
+        if (capability.getPreferredFPS() != null) {
+            frameRate = capability.getPreferredFPS();
         }
 
         // This should be the last call as it will return out once a suitable format is found
