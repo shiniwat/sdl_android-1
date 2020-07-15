@@ -128,8 +128,8 @@ public class VirtualDisplayEncoder {
     }
 
     @SuppressWarnings("unused")
-    public void setStreamingParams(int displayDensity, ImageResolution resolution, int frameRate, int bitrate, int interval, VideoStreamingFormat format) {
-        this.streamingParams = new VideoStreamingParameters(displayDensity, frameRate, bitrate, interval, resolution, format);
+    public void setStreamingParams(int displayDensity, ImageResolution resolution, int frameRate, int bitrate, int interval, VideoStreamingFormat format, boolean stableFrameRate) {
+        this.streamingParams = new VideoStreamingParameters(displayDensity, frameRate, bitrate, interval, resolution, format, stableFrameRate);
     }
 
     @SuppressWarnings("unused")
@@ -157,39 +157,39 @@ public class VirtualDisplayEncoder {
         synchronized (STREAMING_LOCK) {
 
             try {
-                /**
-                inputSurface = prepareVideoEncoder();
+                if (streamingParams.isStableFrameRate()) {
+                    // We use WindowSurface for the input of MediaCodec.
+                    mEncoderSurface = new WindowSurface(mEglCore, prepareVideoEncoder(), true);
+                    virtualDisplay = mDisplayManager.createVirtualDisplay(TAG,
+                            width, height, streamingParams.getDisplayDensity(), mInterSurface, DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
 
-                // Create a virtual display that will output to our encoder.
-                virtualDisplay = mDisplayManager.createVirtualDisplay(TAG,
-                        streamingParams.getResolution().getResolutionWidth(), streamingParams.getResolution().getResolutionHeight(),
-                        streamingParams.getDisplayDensity(), inputSurface, DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
-                 ---*/
-                // We use WindowSurface for the input of MediaCodec.
-                mEncoderSurface = new WindowSurface(mEglCore, prepareVideoEncoder(), true);
-                virtualDisplay = mDisplayManager.createVirtualDisplay(TAG,
-                        width, height, streamingParams.getDisplayDensity(), mInterSurface, DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
+                    startEncoder();
+                    // also start capture thread.
+                    final ConditionVariable cond = new ConditionVariable();
+                    mCaptureThread = new CaptureThread(mEglCore, mInterSurfaceTexture, mTextureId,
+                            mEncoderSurface, mFullFrameBlit, width, height, streamingParams.getFrameRate(), new Runnable() {
+                        @Override
+                        public void run() {
+                            cond.open();
+                        }
+                    });
+                    mCaptureThread.start();
+                    cond.block(); // make sure Capture thread exists.
 
-                startEncoder();
-                // also start capture thread.
-                final ConditionVariable cond = new ConditionVariable();
-                mCaptureThread = new CaptureThread(mEglCore, mInterSurfaceTexture, mTextureId,
-                        mEncoderSurface, mFullFrameBlit, width, height, streamingParams.getFrameRate(), new Runnable() {
-                    @Override
-                    public void run() {
-                        cond.open();
+                    // setup listener prior to the surface is attached to VirtualDisplay.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        mInterSurfaceTexture.setOnFrameAvailableListener(mCaptureThread, mCaptureThread.getHandler());
+                    } else {
+                        mInterSurfaceTexture.setOnFrameAvailableListener(mCaptureThread);
                     }
-                });
-                mCaptureThread.start();
-                cond.block(); // make sure Capture thread exists.
-
-                // setup listener prior to the surface is attached to VirtualDisplay.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    mInterSurfaceTexture.setOnFrameAvailableListener(mCaptureThread, mCaptureThread.getHandler());
                 } else {
-                    mInterSurfaceTexture.setOnFrameAvailableListener(mCaptureThread);
-                }
+                     inputSurface = prepareVideoEncoder();
 
+                     // Create a virtual display that will output to our encoder.
+                     virtualDisplay = mDisplayManager.createVirtualDisplay(TAG,
+                     streamingParams.getResolution().getResolutionWidth(), streamingParams.getResolution().getResolutionHeight(),
+                     streamingParams.getDisplayDensity(), inputSurface, DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
+                }
             } catch (Exception ex) {
                 Log.e(TAG, "Unable to create Virtual Display.");
                 throw new RuntimeException(ex);

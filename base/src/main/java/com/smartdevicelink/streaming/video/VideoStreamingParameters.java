@@ -64,6 +64,7 @@ public class VideoStreamingParameters {
 	private int interval;
 	private ImageResolution resolution;
 	private VideoStreamingFormat format;
+	private boolean stableFrameRate;
 
     public VideoStreamingParameters(){
 	    displayDensity = DEFAULT_DENSITY;
@@ -76,16 +77,18 @@ public class VideoStreamingParameters {
 	    format = new VideoStreamingFormat();
 	    format.setProtocol(DEFAULT_PROTOCOL);
 	    format.setCodec(DEFAULT_CODEC);
+	    stableFrameRate = true;
     }
 
     public VideoStreamingParameters(int displayDensity, int frameRate, int bitrate, int interval,
-                                    ImageResolution resolution, VideoStreamingFormat format){
+                                    ImageResolution resolution, VideoStreamingFormat format, boolean stableFrameRate){
 	    this.displayDensity = displayDensity;
 	    this.frameRate = frameRate;
 	    this.bitrate = bitrate;
 	    this.interval = interval;
 	    this.resolution = resolution;
 	    this.format = format;
+	    this.stableFrameRate = stableFrameRate;
     }
 
     /**
@@ -126,6 +129,7 @@ public class VideoStreamingParameters {
             if (params.format != null) {
                 this.format = params.format;
             }
+            this.stableFrameRate = params.stableFrameRate;
         }
     }
 
@@ -265,6 +269,14 @@ public class VideoStreamingParameters {
 		return resolution;
 	}
 
+	public boolean isStableFrameRate() {
+        return stableFrameRate;
+    }
+
+    public void setStableFrameRate(boolean isStable) {
+        stableFrameRate = isStable;
+    }
+
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
@@ -282,7 +294,10 @@ public class VideoStreamingParameters {
         builder.append(bitrate);
         builder.append("}, IFrame interval{ ");
         builder.append(interval);
+        builder.append("}, stableFrameRate{");
+        builder.append(stableFrameRate);
         builder.append("}");
+
         return builder.toString();
     }
 }

@@ -106,7 +106,10 @@ public class VideoStreamManager extends BaseVideoStreamManager {
 			if(SessionType.NAV.equals(type)){
 				if (session != null && session.getAcceptedVideoParams() != null) {
 					parameters = session.getAcceptedVideoParams();
+					Log.d(TAG, "getAcceptedVideoParams = " + parameters.toString());
 					VideoStreamManager.this.streamListener = session.startVideoStream();
+				} else {
+					Log.d(TAG, "getAcceptedVideoParams is null");
 				}
 
 				if (VideoStreamManager.this.streamListener == null) {
