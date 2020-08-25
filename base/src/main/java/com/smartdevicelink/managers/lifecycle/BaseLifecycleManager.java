@@ -1312,7 +1312,9 @@ abstract class BaseLifecycleManager {
         this.systemCapabilityManager = new SystemCapabilityManager(internalInterface);
         setupInternalRpcListeners();
         // debug version info
-        DebugExtension.getListener().onNotifyVersion(BuildConfig.VERSION_NAME);
+        if (DebugExtension.getListener() != null) {
+            DebugExtension.getListener().onNotifyVersion(BuildConfig.VERSION_NAME);
+        }
     }
 
 
