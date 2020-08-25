@@ -36,8 +36,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RestrictTo;
 
 import com.livio.taskmaster.Taskmaster;
+import com.smartdevicelink.BuildConfig;
 import com.smartdevicelink.SdlConnection.ISdlSessionListener;
 import com.smartdevicelink.SdlConnection.SdlSession;
+import com.smartdevicelink.debugext.DebugExtension;
 import com.smartdevicelink.exception.SdlException;
 import com.smartdevicelink.managers.SdlManager;
 import com.smartdevicelink.managers.ServiceEncryptionListener;
@@ -983,7 +985,9 @@ abstract class BaseLifecycleManager {
 
         @Override
         public void removeServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener) {
-            BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+            if (BaseLifecycleManager.this.session != null) {
+                BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+            }
         }
 
         @Override
@@ -1307,6 +1311,8 @@ abstract class BaseLifecycleManager {
         this.rpcRequestListeners = new HashMap<>();
         this.systemCapabilityManager = new SystemCapabilityManager(internalInterface);
         setupInternalRpcListeners();
+        // debug version info
+        DebugExtension.getListener().onNotifyVersion(BuildConfig.VERSION_NAME);
     }
 
 

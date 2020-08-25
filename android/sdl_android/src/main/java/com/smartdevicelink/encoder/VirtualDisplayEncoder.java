@@ -54,6 +54,7 @@ import com.android.grafika.gles.FullFrameRect;
 import com.android.grafika.gles.OffscreenSurface;
 import com.android.grafika.gles.Texture2dProgram;
 import com.android.grafika.gles.WindowSurface;
+import com.smartdevicelink.debugext.DebugExtension;
 import com.smartdevicelink.proxy.interfaces.IVideoStreamListener;
 import com.smartdevicelink.proxy.rpc.ImageResolution;
 import com.smartdevicelink.proxy.rpc.VideoStreamingFormat;
@@ -470,6 +471,14 @@ public class VirtualDisplayEncoder {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mVideoEncoder.setCallback(new MediaCodec.Callback() {
+
+                    // for debug extension
+                    int callCount = 0;
+                    int totalDataSize = 0;
+                    long startTime = System.currentTimeMillis();
+                    long lastTime = startTime;
+                    int lastCount = callCount;
+
                     @Override
                     public void onInputBufferAvailable(MediaCodec codec, int index) {
                         // nothing to do here
@@ -478,6 +487,19 @@ public class VirtualDisplayEncoder {
                     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
                     @Override
                     public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
+                        if ( callCount == 0 ) {
+                            totalDataSize = 0;
+                            DebugExtension.totalDataSize(0);
+                        }
+                        if (callCount % 500 == 0) {
+                            long current = System.currentTimeMillis();
+                            long duration = (current - lastTime) / 1000;
+                            lastTime = current;
+                            double fps = (double)(callCount - lastCount) / (double)duration;
+                            DebugExtension.log(TAG, "onOutputBufferAvailable /callCount:" + callCount + "; call/sec:" + fps);
+                            lastCount = callCount;
+                        }
+                        callCount++;
                         try {
                             ByteBuffer encodedData = codec.getOutputBuffer(index);
                             if (encodedData != null) {
@@ -502,6 +524,8 @@ public class VirtualDisplayEncoder {
 
                                     encodedData.get(dataToWrite, dataOffset, info.size);
                                     if (mOutputListener != null) {
+                                        totalDataSize += dataToWrite.length;
+                                        DebugExtension.totalDataSize(totalDataSize);
                                         mOutputListener.sendFrame(dataToWrite, 0, dataToWrite.length, info.presentationTimeUs);
                                     }
                                 }

@@ -32,11 +32,13 @@
 package com.smartdevicelink.protocol;
 
 import com.livio.BSON.BsonEncoder;
+import com.smartdevicelink.debugext.DebugExtension;
 import com.smartdevicelink.protocol.enums.FrameType;
 import com.smartdevicelink.transport.utl.TransportRecord;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This class is only intended to be parcelable from the transport broker to the SDL Router Service.
@@ -238,6 +240,15 @@ class BaseSdlPacket {
 	
 	public byte[] constructPacket() {
 		if (bsonPayload != null && !bsonPayload.isEmpty()) {
+			// debug extension
+			{
+				String log = "BSON (" + bsonPayload.size() + ")[";
+				for (Map.Entry<String, Object> e : bsonPayload.entrySet()) {
+					log += "(" + e.getKey() + ":" + e.getValue() + ")";
+				}
+				log += "]";
+				DebugExtension.log("SdlPacket", log);
+			}
 			byte[] bsonBytes = BsonEncoder.encodeToBytes(bsonPayload);
 			if(bsonBytes != null) {
 				payload = bsonBytes;

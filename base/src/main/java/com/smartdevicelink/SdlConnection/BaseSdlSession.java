@@ -32,12 +32,14 @@
 
 package com.smartdevicelink.SdlConnection;
 
+import com.smartdevicelink.debugext.DebugExtension;
 import com.smartdevicelink.exception.SdlException;
 import com.smartdevicelink.managers.lifecycle.RpcConverter;
 import com.smartdevicelink.protocol.ISdlProtocol;
 import com.smartdevicelink.protocol.ProtocolMessage;
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.protocol.SdlProtocolBase;
+import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.protocol.enums.SessionType;
 import com.smartdevicelink.proxy.RPCMessage;
 import com.smartdevicelink.proxy.interfaces.ISdlServiceListener;
@@ -145,6 +147,18 @@ public abstract class BaseSdlSession implements ISdlProtocol, ISecurityInitializ
     public void sendMessage(ProtocolMessage msg) {
         if (sdlProtocol == null){
             return;
+        }
+        if (SessionType.RPC.equals(msg.getSessionType())) {
+            try {
+                String mes = "RPC:outgoingMessage";
+                mes += " /funcId:" + msg.getFunctionID() + ":" + FunctionID.getFunctionName(msg.getFunctionID());
+                mes += " /data:" + (new String(msg.getData(), "UTF-8"));
+                DebugExtension.log(TAG, mes);
+
+            } catch (Exception e) {
+                DebugExtension.log(TAG, "outgoingMessage failed. /e:" + e.getMessage());
+                e.printStackTrace();
+            }
         }
         sdlProtocol.sendMessage(msg);
     }
@@ -270,6 +284,17 @@ public abstract class BaseSdlSession implements ISdlProtocol, ISecurityInitializ
             processControlService(msg);
         } else if (SessionType.RPC.equals(msg.getSessionType())
                 || SessionType.BULK_DATA.equals(msg.getSessionType())) {
+            // dump current message for debugging
+            try {
+                String mes = "RPC:incomingMessage";
+                mes += " /funcId:" + msg.getFunctionID() + ":" + FunctionID.getFunctionName(msg.getFunctionID());
+                mes += " /data:" + (new String(msg.getData(), "UTF-8"));
+                DebugExtension.log(TAG, mes);
+
+            } catch (Exception e) {
+                DebugExtension.log(TAG, "onProtocolMessageReceived failed. /e:" + e.getMessage());
+                e.printStackTrace();
+            }
             RPCMessage rpc = RpcConverter.extractRpc(msg, this.sdlProtocol.getProtocolVersion());
             this.sessionListener.onRPCMessageReceived(rpc);
         }

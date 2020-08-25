@@ -49,6 +49,7 @@ import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
 
+import com.smartdevicelink.debugext.DebugExtension;
 import com.smartdevicelink.protocol.SdlPacket;
 import com.smartdevicelink.transport.enums.TransportType;
 import com.smartdevicelink.transport.utl.ByteAraryMessageAssembler;
@@ -644,6 +645,8 @@ public class TransportBroker {
         }
         if (this.routerPackage != null && this.routerClassName != null) {
             DebugTool.logInfo(TAG, "Sending bind request to " + this.routerPackage + " - " + this.routerClassName);
+            // debug extension
+            DebugExtension.connectRouter(this.routerPackage + ":" + this.routerClassName);
             Intent bindingIntent = new Intent();
             bindingIntent.setClassName(this.routerPackage, this.routerClassName);//This sets an explicit intent
             //Quickly make sure it's just up and running
