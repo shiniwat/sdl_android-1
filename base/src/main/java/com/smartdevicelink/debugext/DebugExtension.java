@@ -1,6 +1,7 @@
 package com.smartdevicelink.debugext;
 
-import android.util.Log;
+// because this is under base package folder, we cannot use android.util.Log
+//import android.util.Log;
 
 public class DebugExtension {
     private static final String TAG = DebugExtension.class.getSimpleName();
@@ -40,7 +41,7 @@ public class DebugExtension {
         if (sListener != null) {
             sListener.onLog(System.currentTimeMillis(), t, msg);
         } else {
-            Log.d(t, "listener is null: " + msg);
+            //Log.d(t, "listener is null: " + msg);
         }
     }
 
