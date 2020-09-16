@@ -59,6 +59,7 @@ import com.smartdevicelink.proxy.interfaces.IVideoStreamListener;
 import com.smartdevicelink.proxy.rpc.ImageResolution;
 import com.smartdevicelink.proxy.rpc.VideoStreamingFormat;
 import com.smartdevicelink.proxy.rpc.enums.VideoStreamingCodec;
+import com.smartdevicelink.streaming.video.IVideoStreamListener;
 import com.smartdevicelink.streaming.video.VideoStreamingParameters;
 import com.smartdevicelink.util.DebugTool;
 
@@ -121,7 +122,6 @@ public class VirtualDisplayEncoder {
         initPassed = true;
     }
 
-    @SuppressWarnings("unused")
     public VideoStreamingParameters getStreamingParams(){
         return this.streamingParams;
     }
@@ -612,7 +612,6 @@ public class VirtualDisplayEncoder {
             }
         }
 
-        @SuppressWarnings("deprecation")
         void drainEncoder(boolean endOfStream) {
             if (mVideoEncoder == null || mOutputListener == null) {
                 return;
