@@ -55,7 +55,6 @@ import com.android.grafika.gles.OffscreenSurface;
 import com.android.grafika.gles.Texture2dProgram;
 import com.android.grafika.gles.WindowSurface;
 import com.smartdevicelink.debugext.DebugExtension;
-import com.smartdevicelink.proxy.interfaces.IVideoStreamListener;
 import com.smartdevicelink.proxy.rpc.ImageResolution;
 import com.smartdevicelink.proxy.rpc.VideoStreamingFormat;
 import com.smartdevicelink.proxy.rpc.enums.VideoStreamingCodec;
@@ -129,7 +128,7 @@ public class VirtualDisplayEncoder {
 
     @Deprecated
     public void setStreamingParams(int displayDensity, ImageResolution resolution, int frameRate, int bitrate, int interval, VideoStreamingFormat format) {
-        this.streamingParams = new VideoStreamingParameters(displayDensity, frameRate, bitrate, interval, resolution, format);
+        this.streamingParams = new VideoStreamingParameters(displayDensity, frameRate, bitrate, interval, resolution, format, true);
     }
 
     @SuppressWarnings("unused")
