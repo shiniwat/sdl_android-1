@@ -76,9 +76,11 @@ public class TransportBroker {
     private static final int MAX_MESSAGING_VERSION = 2;
     private static final int MIN_MESSAGING_VERSION = 1;
 
-    /** Version of the router service that supports the new additional transports (USB and TCP) */
+    /**
+     * Version of the router service that supports the new additional transports (USB and TCP)
+     */
     private static final int RS_MULTI_TRANSPORT_SUPPORT = 8;
-    private static final TransportRecord LEGACY_TRANSPORT_RECORD = new TransportRecord(TransportType.BLUETOOTH,null);
+    private static final TransportRecord LEGACY_TRANSPORT_RECORD = new TransportRecord(TransportType.BLUETOOTH, null);
 
     private final String WHERE_TO_REPLY_PREFIX = "com.sdl.android.";
     private final String appId;
@@ -245,7 +247,6 @@ public class TransportBroker {
                     }
 
 
-
                     break;
                 case TransportConstants.ROUTER_UNREGISTER_CLIENT_RESPONSE:
                     if (msg.arg1 == TransportConstants.UNREGISTRATION_RESPONSE_SUCESS) {
@@ -258,7 +259,7 @@ public class TransportBroker {
 
                     break;
                 case TransportConstants.ROUTER_RECEIVED_PACKET:
-                    if(bundle == null){
+                    if (bundle == null) {
                         DebugTool.logWarning(TAG, "Received packet message from router service with no bundle");
                         return;
                     }
@@ -271,7 +272,7 @@ public class TransportBroker {
                         if (flags == TransportConstants.BYTES_TO_SEND_FLAG_NONE) {
                             if (packet != null) { //Log.i(TAG, "received packet to process "+  packet.toString());
 
-                                if(packet.getTransportRecord() == null){
+                                if (packet.getTransportRecord() == null) {
                                     // If the transport record is null, one must be added
                                     // This is likely due to an older router service being used
                                     // in which only a bluetooth transport is available
@@ -314,7 +315,7 @@ public class TransportBroker {
                     }
                     break;
                 case TransportConstants.HARDWARE_CONNECTION_EVENT:
-                    if(bundle == null){
+                    if (bundle == null) {
                         DebugTool.logWarning(TAG, "Received hardware connection message from router service with no bundle");
                         return;
                     }
@@ -342,7 +343,7 @@ public class TransportBroker {
 
                     if (bundle.containsKey(TransportConstants.HARDWARE_CONNECTED) || bundle.containsKey(TransportConstants.CURRENT_HARDWARE_CONNECTED)) {
                         //This is a connection event
-                        handleConnectionEvent(bundle,broker);
+                        handleConnectionEvent(bundle, broker);
                         break;
                     }
                     break;
@@ -355,11 +356,12 @@ public class TransportBroker {
         /**
          * Handle a potential connection event. This will adapt legacy router service implementations
          * into the new multiple transport scheme.
+         *
          * @param bundle the received bundle from the router service
          * @param broker reference to the transport broker that this handler exists
          * @return if a connection event was triggered in the supplied broker
          */
-        private boolean handleConnectionEvent(Bundle bundle, TransportBroker broker){
+        private boolean handleConnectionEvent(Bundle bundle, TransportBroker broker) {
             if (broker.routerServiceVersion < RS_MULTI_TRANSPORT_SUPPORT) {
                 //Previous versions of the router service only supports a single
                 //transport, so this will be the only extra received
@@ -369,7 +371,7 @@ public class TransportBroker {
                     broker.onHardwareConnected(Collections.singletonList(LEGACY_TRANSPORT_RECORD));
                     return true;
                 }
-            } else{
+            } else {
                 //Router service supports multiple transport
 
                 if (bundle.containsKey(TransportConstants.CURRENT_HARDWARE_CONNECTED)) {
@@ -456,8 +458,8 @@ public class TransportBroker {
 
         } catch (Exception e) {
             //This is ok
-            DebugTool.logWarning(TAG, "Unable to unbind from router service. bound? " + isBound + " context? " + (getContext()!=null) + " router connection?" + (routerConnection != null));
-        }finally {
+            DebugTool.logWarning(TAG, "Unable to unbind from router service. bound? " + isBound + " context? " + (getContext() != null) + " router connection?" + (routerConnection != null));
+        } finally {
             isBound = false;
         }
     }
@@ -492,7 +494,7 @@ public class TransportBroker {
 
     }
 
-    protected int getRouterServiceVersion(){
+    protected int getRouterServiceVersion() {
         return routerServiceVersion;
     }
 
@@ -506,7 +508,7 @@ public class TransportBroker {
         if (packet == null
             //|| offset<0
             //|| count<0
-                ) {//|| count>(bytes.length-offset)){
+        ) {//|| count>(bytes.length-offset)){
             DebugTool.logWarning(TAG, whereToReply + "incorrect params supplied");
             return false;
         }
@@ -583,7 +585,7 @@ public class TransportBroker {
 
     @SuppressLint("InlinedApi")
     private boolean sendBindingIntent() {
-        if(this.isBound){
+        if (this.isBound) {
             DebugTool.logError(TAG, "Already bound");
             return false;
         }
