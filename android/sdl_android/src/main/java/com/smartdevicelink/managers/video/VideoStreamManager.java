@@ -284,7 +284,7 @@ public class VideoStreamManager extends BaseVideoStreamManager {
      *                           works best for the currently connected module.
      * @param encrypted          a flag of if the stream should be encrypted. Only set if you have a supplied encryption library that the module can understand.
      */
-    public void startRemoteDisplayStream(Context context, Class<? extends SdlRemoteDisplay> remoteDisplayClass, VideoStreamingParameters parameters, final boolean encrypted) {
+    public void startRemoteDisplayStream(Context context, Class<? extends SdlRemoteDisplay> remoteDisplayClass, final VideoStreamingParameters parameters, final boolean encrypted, final CapabilitiesMergeType capabilitiesMergeType) {
         this.context = new WeakReference<>(context);
         this.remoteDisplayClass = remoteDisplayClass;
         int majorProtocolVersion = internalInterface.getProtocolVersion().getMajor();
@@ -294,14 +294,21 @@ public class VideoStreamManager extends BaseVideoStreamManager {
             stateMachine.transitionToState(StreamingStateMachine.ERROR);
             return;
         }
-        if (parameters == null) {
             if (majorProtocolVersion >= 5) {
                 if (internalInterface.getSystemCapabilityManager() != null) {
                     internalInterface.getSystemCapabilityManager().getCapability(SystemCapabilityType.VIDEO_STREAMING, new OnSystemCapabilityListener() {
                         @Override
                         public void onCapabilityRetrieved(Object capability) {
                             VideoStreamingParameters params = new VideoStreamingParameters();
-                            params.update((VideoStreamingCapability) capability, vehicleMake);    //Streaming parameters are ready time to stream
+                            VideoStreamingCapability castedCapability = (VideoStreamingCapability) capability;
+                            if (capabilitiesMergeType == CapabilitiesMergeType.SOFT) {
+                                params.update(parameters);
+                                params.update(castedCapability, vehicleMake);
+                            } else {
+                                params.update(castedCapability, vehicleMake);
+                                params.update(parameters);
+                            }
+
                             startStreaming(params, encrypted);
                         }
 
@@ -324,10 +331,7 @@ public class VideoStreamManager extends BaseVideoStreamManager {
                 }
                 startStreaming(params, encrypted);
             }
-        } else {
-            startStreaming(parameters, encrypted);
         }
-    }
 
 
     /**
