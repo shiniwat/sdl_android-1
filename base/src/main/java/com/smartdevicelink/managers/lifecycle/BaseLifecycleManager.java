@@ -88,6 +88,8 @@ import com.smartdevicelink.util.CorrelationIdGenerator;
 import com.smartdevicelink.util.DebugTool;
 import com.smartdevicelink.util.FileUtls;
 import com.smartdevicelink.util.Version;
+import com.smartdevicelink.debugext.DebugExtension;
+import com.smartdevicelink.BuildConfig;
 
 import java.util.HashMap;
 import java.util.List;
