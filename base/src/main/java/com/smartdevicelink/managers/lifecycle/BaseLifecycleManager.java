@@ -800,7 +800,9 @@ abstract class BaseLifecycleManager {
                 pm.setPriorityCoefficient(1);
             }
 
-            session.sendMessage(pm);
+            if (session != null) {
+                session.sendMessage(pm);
+            }
 
         } catch (OutOfMemoryError e) {
             e.printStackTrace();

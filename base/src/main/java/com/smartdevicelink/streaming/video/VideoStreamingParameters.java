@@ -131,6 +131,9 @@ public class VideoStreamingParameters {
             if (params.interval > 0) {
                 this.interval = params.interval;
             }
+            if (this.resolution == null) {
+                this.resolution = new ImageResolution();
+            }
             if (params.resolution != null) {
                 if (params.resolution.getResolutionHeight() != null && params.resolution.getResolutionHeight() > 0) {
                     this.resolution.setResolutionHeight(params.resolution.getResolutionHeight());
@@ -157,9 +160,10 @@ public class VideoStreamingParameters {
      */
     public void update(VideoStreamingCapability capability, String vehicleMake) {
         if (capability.getMaxBitrate() != null) {
-            this.bitrate = capability.getMaxBitrate() * 1000;
+            this.bitrate = Math.min(this.bitrate, capability.getMaxBitrate() * 1000);
         } // NOTE: the unit of maxBitrate in getSystemCapability is kbps.
         double scale = DEFAULT_SCALE;
+        // For resolution and scale, the capability values should be taken than parameters specified by developers.
         if (capability.getScale() != null) {
             scale = capability.getScale();
         }
@@ -180,7 +184,7 @@ public class VideoStreamingParameters {
             }
         }
         if (capability.getPreferredFPS() != null) {
-            this.frameRate = capability.getPreferredFPS();
+            this.frameRate = Math.min(this.frameRate, capability.getPreferredFPS());
         }
 
         // This should be the last call as it will return out once a suitable format is found
