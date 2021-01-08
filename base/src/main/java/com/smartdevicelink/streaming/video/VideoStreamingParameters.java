@@ -92,15 +92,16 @@ public class VideoStreamingParameters {
      * @param format
      * @param stableFrameRate
      */
+    @Deprecated
     public VideoStreamingParameters(int displayDensity, int frameRate, int bitrate, int interval,
-                                    ImageResolution resolution, VideoStreamingFormat format, boolean stableFrameRate){
+                                    ImageResolution resolution, VideoStreamingFormat format){
 	    this.displayDensity = displayDensity;
 	    this.frameRate = frameRate;
 	    this.bitrate = bitrate;
 	    this.interval = interval;
 	    this.resolution = resolution;
 	    this.format = format;
-	    this.stableFrameRate = stableFrameRate;
+	    this.stableFrameRate = true;
     }
 
     /**
@@ -163,7 +164,7 @@ public class VideoStreamingParameters {
             this.bitrate = Math.min(this.bitrate, capability.getMaxBitrate() * 1000);
         } // NOTE: the unit of maxBitrate in getSystemCapability is kbps.
         double scale = DEFAULT_SCALE;
-        // For resolution and scale, the capability values should be taken than parameters specified by developers.
+        // For resolution and scale, the capability values should be taken rather than parameters specified by developers.
         if (capability.getScale() != null) {
             scale = capability.getScale();
         }
@@ -190,6 +191,9 @@ public class VideoStreamingParameters {
         // This should be the last call as it will return out once a suitable format is found
         final List<VideoStreamingFormat> formats = capability.getSupportedFormats();
         if (formats != null && formats.size() > 0) {
+            if (this.format != null && formats.contains(this.format)) {
+                return; // given format is supported, so no need to change.
+            }
             for (VideoStreamingFormat format : formats) {
                 for (VideoStreamingFormat currentlySupportedFormat : currentlySupportedFormats) {
                     if (currentlySupportedFormat.equals(format)) {

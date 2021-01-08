@@ -36,7 +36,6 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Display;
 import android.view.InputDevice;
 import android.view.MotionEvent;
@@ -313,7 +312,7 @@ public class VideoStreamManager extends BaseVideoStreamManager {
                     }
                 }, false);
             } else {
-                Log.e(TAG, "getSystemCapabilityManager is null");
+                DebugTool.logError(TAG, "getSystemCapabilityManager is null");
             }
         } else {
             //We just use default video streaming params
