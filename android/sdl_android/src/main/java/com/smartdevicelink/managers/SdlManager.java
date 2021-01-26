@@ -120,6 +120,46 @@ public class SdlManager extends BaseSdlManager {
         }
     }
 
+    public void start(IRPCMessageListener listener) {
+        if (lifecycleManager == null) {
+            if (transport != null && transport.getTransportType() == TransportType.MULTIPLEX) {
+                //Do the thing
+                MultiplexTransportConfig multiplexTransportConfig = (MultiplexTransportConfig) (transport);
+                final MultiplexTransportConfig.TransportListener devListener = multiplexTransportConfig.getTransportListener();
+                multiplexTransportConfig.setTransportListener(new MultiplexTransportConfig.TransportListener() {
+                    @Override
+                    public void onTransportEvent(List<TransportRecord> connectedTransports, boolean audioStreamTransportAvail, boolean videoStreamTransportAvail) {
+
+                        //Pass to sub managers that need it
+                        if (videoStreamManager != null) {
+                            videoStreamManager.handleTransportUpdated(connectedTransports, audioStreamTransportAvail, videoStreamTransportAvail);
+                        }
+
+                        if (audioStreamManager != null) {
+                            audioStreamManager.handleTransportUpdated(connectedTransports, audioStreamTransportAvail, videoStreamTransportAvail);
+                        }
+                        //If the developer supplied a listener to start, it is time to call that
+                        if (devListener != null) {
+                            devListener.onTransportEvent(connectedTransports, audioStreamTransportAvail, videoStreamTransportAvail);
+                        }
+                    }
+                });
+
+                //If the requires audio support has not been set, it should be set to true if the
+                //app is a media app, and false otherwise
+                if (multiplexTransportConfig.requiresAudioSupport() == null) {
+                    multiplexTransportConfig.setRequiresAudioSupport(isMediaApp);
+                }
+            }
+
+            super.start();
+
+            lifecycleManager.setContext(context);
+            lifecycleManager.setRpcListener(listener);
+            lifecycleManager.start();
+        }
+    }
+
     @Override
     protected void initialize() {
         // Instantiate sub managers

@@ -110,6 +110,9 @@ public abstract class BaseSdlSession implements ISdlProtocol, ISecurityInitializ
             sdlSecurity.shutDown();
         }
         if (sdlProtocol != null) {
+            DebugTool.logInfo(TAG, "BaseSdlSession.close calls endSession for　" + sessionId);
+            // make sure endService before ending session.
+            endService(SessionType.RPC);
             sdlProtocol.endSession((byte) sessionId);
         }
     }

@@ -37,6 +37,7 @@ import androidx.annotation.RestrictTo;
 
 import com.livio.taskmaster.Taskmaster;
 import com.smartdevicelink.exception.SdlException;
+import com.smartdevicelink.managers.IRPCMessageListener;
 import com.smartdevicelink.managers.ISdl;
 import com.smartdevicelink.managers.SdlManager;
 import com.smartdevicelink.managers.ServiceEncryptionListener;
@@ -130,6 +131,11 @@ abstract class BaseLifecycleManager {
     final Version minimumRPCVersion;
     BaseTransportConfig _transportConfig;
     private Taskmaster taskmaster;
+    private IRPCMessageListener rpcMessageListener = null;
+
+    public void setRpcListener(IRPCMessageListener listener) {
+        rpcMessageListener = listener;
+    }
 
     BaseLifecycleManager(AppConfig appConfig, BaseTransportConfig config, LifecycleListener listener) {
         this.appConfig = appConfig;
@@ -464,6 +470,9 @@ abstract class BaseLifecycleManager {
                 return false;
             }
 
+            if (rpcMessageListener != null) {
+                rpcMessageListener.onRPCMessage(message);
+            }
             final int id = message.getFunctionID().getId();
             CopyOnWriteArrayList<OnRPCListener> listeners = rpcListeners.get(id);
             if (listeners != null && listeners.size() > 0) {
