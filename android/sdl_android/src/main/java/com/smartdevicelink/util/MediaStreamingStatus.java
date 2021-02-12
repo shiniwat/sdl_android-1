@@ -151,6 +151,7 @@ public class MediaStreamingStatus {
         DebugTool.logInfo(TAG, "Audio device connected: " + audioDevice);
         switch (audioDevice) {
             case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
+            case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
                 if (isBluetoothActuallyAvailable()) {
                     setupBluetoothBroadcastReceiver();
                     return true; //Make sure this doesn't fall to any other logic after this point
@@ -185,6 +186,9 @@ public class MediaStreamingStatus {
         }
 
         int state = adapter.getProfileConnectionState(BluetoothProfile.A2DP);
+        if (state == 0) {
+            state = adapter.getProfileConnectionState(BluetoothProfile.HEADSET);
+        }
         if (state != BluetoothAdapter.STATE_CONNECTING && state != BluetoothAdapter.STATE_CONNECTED) {
             //False positive
             return false;

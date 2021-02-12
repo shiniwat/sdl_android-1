@@ -114,10 +114,17 @@ public class TransportManager extends TransportManagerBase {
     }
 
     @Override
-    public void close(long sessionId) {
+    public void close(final long sessionId) {
         if (transport != null) {
-            transport.removeSession(sessionId);
-            transport.stop();
+            Handler handler = new Handler(Looper.getMainLooper());
+            // removeSession needs to be somewhat delayed, as it causes RouterService to not sending endSession.
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    transport.removeSession(sessionId);
+                    transport.stop();
+                }
+            }, 1000);
         } else if (legacyBluetoothTransport != null) {
             legacyBluetoothTransport.stop();
             legacyBluetoothTransport = null;

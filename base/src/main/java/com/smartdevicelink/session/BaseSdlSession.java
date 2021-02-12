@@ -112,7 +112,7 @@ public abstract class BaseSdlSession implements ISdlProtocol, ISecurityInitializ
         if (sdlProtocol != null) {
             DebugTool.logInfo(TAG, "BaseSdlSession.close calls endSession for　" + sessionId);
             // make sure endService before ending session.
-            endService(SessionType.RPC);
+            //endService(SessionType.RPC); this calls endSession, and eventually endSession gets called twice. No need to do this.
             sdlProtocol.endSession((byte) sessionId);
         }
     }
