@@ -126,8 +126,7 @@ public class TransportManager extends TransportManagerBase {
                 }
             }, 1000);
         } else if (legacyBluetoothTransport != null) {
-            legacyBluetoothTransport.stop();
-            legacyBluetoothTransport = null;
+            exitLegacyMode(null);
         }
     }
 
@@ -433,25 +432,32 @@ public class TransportManager extends TransportManagerBase {
         }
     }
 
+    /**
+     * A synchronized method to exit out of legacy mode
+     * @param info if this is null, the transport listener callback will not be called
+     */
     @Override
     synchronized void exitLegacyMode(String info) {
-        TransportRecord legacyTransportRecord = null;
-        if (legacyBluetoothTransport != null) {
-            legacyTransportRecord = legacyBluetoothTransport.getTransportRecord();
+        if (legacyBluetoothTransport != null) { //If this is null, there is no reason to proceed
+            TransportRecord legacyTransportRecord = legacyBluetoothTransport.getTransportRecord();
             legacyBluetoothTransport.stop();
             legacyBluetoothTransport = null;
-        }
-        legacyBluetoothHandler = null;
-        synchronized (TRANSPORT_STATUS_LOCK) {
-            TransportManager.this.transportStatus.clear();
-        }
-        if (contextWeakReference != null) {
-            try {
-                contextWeakReference.get().unregisterReceiver(legacyDisconnectReceiver);
-            } catch (Exception e) {
+
+            legacyBluetoothHandler = null;
+            synchronized (TRANSPORT_STATUS_LOCK) {
+                TransportManager.this.transportStatus.clear();
+            }
+            if (contextWeakReference != null) {
+                try {
+                    contextWeakReference.get().unregisterReceiver(legacyDisconnectReceiver);
+                } catch (Exception e) {
+                    DebugTool.logError(TAG, "Error attempting to unregister legacy mode receiver", e);
+                }
+            }
+            if (transportListener != null && info != null) {
+                transportListener.onTransportDisconnected(info, legacyTransportRecord, null);
             }
         }
-        transportListener.onTransportDisconnected(info, legacyTransportRecord, null);
     }
 
 

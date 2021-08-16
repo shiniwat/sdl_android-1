@@ -45,6 +45,7 @@ import com.smartdevicelink.managers.permission.PermissionManager;
 import com.smartdevicelink.marshal.JsonRPCMarshaller;
 import com.smartdevicelink.protocol.ISdlServiceListener;
 import com.smartdevicelink.protocol.ProtocolMessage;
+import com.smartdevicelink.protocol.SdlProtocolBase;
 import com.smartdevicelink.protocol.enums.FunctionID;
 import com.smartdevicelink.protocol.enums.MessageType;
 import com.smartdevicelink.protocol.enums.SessionType;
@@ -52,6 +53,7 @@ import com.smartdevicelink.proxy.RPCMessage;
 import com.smartdevicelink.proxy.RPCNotification;
 import com.smartdevicelink.proxy.RPCRequest;
 import com.smartdevicelink.proxy.RPCResponse;
+import com.smartdevicelink.proxy.rpc.DisplayCapabilities;
 import com.smartdevicelink.proxy.rpc.GenericResponse;
 import com.smartdevicelink.proxy.rpc.OnAppInterfaceUnregistered;
 import com.smartdevicelink.proxy.rpc.OnButtonEvent;
@@ -61,6 +63,8 @@ import com.smartdevicelink.proxy.rpc.OnSystemRequest;
 import com.smartdevicelink.proxy.rpc.RegisterAppInterface;
 import com.smartdevicelink.proxy.rpc.RegisterAppInterfaceResponse;
 import com.smartdevicelink.proxy.rpc.SdlMsgVersion;
+import com.smartdevicelink.proxy.rpc.SetDisplayLayout;
+import com.smartdevicelink.proxy.rpc.SetDisplayLayoutResponse;
 import com.smartdevicelink.proxy.rpc.SubscribeButton;
 import com.smartdevicelink.proxy.rpc.SystemRequest;
 import com.smartdevicelink.proxy.rpc.TTSChunk;
@@ -73,6 +77,7 @@ import com.smartdevicelink.proxy.rpc.enums.ButtonName;
 import com.smartdevicelink.proxy.rpc.enums.FileType;
 import com.smartdevicelink.proxy.rpc.enums.HMILevel;
 import com.smartdevicelink.proxy.rpc.enums.Language;
+import com.smartdevicelink.proxy.rpc.enums.PredefinedLayout;
 import com.smartdevicelink.proxy.rpc.enums.RequestType;
 import com.smartdevicelink.proxy.rpc.enums.Result;
 import com.smartdevicelink.proxy.rpc.enums.SdlDisconnectedReason;
@@ -139,6 +144,8 @@ abstract class BaseLifecycleManager {
         rpcMessageListener = listener;
     }
     private boolean didCheckSystemInfo = false;
+    String lastDisplayLayoutRequestTemplate;
+    DisplayCapabilities initialMediaCapabilities;
 
     BaseLifecycleManager(AppConfig appConfig, BaseTransportConfig config, LifecycleListener listener) {
         this.appConfig = appConfig;
@@ -153,7 +160,7 @@ abstract class BaseLifecycleManager {
         try {
             session.startSession();
         } catch (SdlException e) {
-            e.printStackTrace();
+            DebugTool.logError(TAG,"Error attempting to start session", e);
         }
     }
 
@@ -391,6 +398,7 @@ abstract class BaseLifecycleManager {
                             msg.setCorrelationID(UNREGISTER_APP_INTERFACE_CORRELATION_ID);
                             sendRPCMessagePrivate(msg, true);
                             clean();
+                            onClose("RPC spec version not supported: " + rpcSpecVersion.toString(), null, SdlDisconnectedReason.MINIMUM_RPC_VERSION_HIGHER_THAN_SUPPORTED);
                             return;
                         }
                         if (!didCheckSystemInfo && lifecycleListener != null) {
@@ -406,11 +414,16 @@ abstract class BaseLifecycleManager {
                                     msg.setCorrelationID(UNREGISTER_APP_INTERFACE_CORRELATION_ID);
                                     sendRPCMessagePrivate(msg, true);
                                     clean();
+                                    onClose("System not supported", null, SdlDisconnectedReason.DEFAULT);
                                     return;
                                 }
                             }
                             //If the vehicle is acceptable and this is the first check, init security lib
                             setSecurityLibraryIfAvailable(vehicleType);
+                        }
+                        // HAX: Issue #1690, Ford Sync bug returning incorrect display capabilities (https://github.com/smartdevicelink/sdl_java_suite/issues/1690). Store the initial capabilities if we are a media app so that we can use them in the future.
+                        if (appConfig.appType.contains(AppHMIType.MEDIA)) {
+                            initialMediaCapabilities = raiResponse.getDisplayCapabilities();
                         }
                         systemCapabilityManager.parseRAIResponse(raiResponse);
                         break;
@@ -488,6 +501,7 @@ abstract class BaseLifecycleManager {
                         if (!onAppInterfaceUnregistered.getReason().equals(AppInterfaceUnregisteredReason.LANGUAGE_CHANGE)) {
                             DebugTool.logInfo(TAG, "on app interface unregistered");
                             clean();
+                            onClose("OnAppInterfaceUnregistered received from head unit", null, SdlDisconnectedReason.APP_INTERFACE_UNREG);
                         } else {
                             DebugTool.logInfo(TAG, "re-registering for language change");
                             cycle(SdlDisconnectedReason.LANGUAGE_CHANGE);
@@ -496,6 +510,7 @@ abstract class BaseLifecycleManager {
                     case UNREGISTER_APP_INTERFACE:
                         DebugTool.logInfo(TAG, "unregister app interface");
                         clean();
+                        onClose("UnregisterAppInterface response received from head unit", null, SdlDisconnectedReason.APP_INTERFACE_UNREG);
                         break;
                 }
             }
@@ -835,6 +850,10 @@ abstract class BaseLifecycleManager {
                         addOnRPCResponseListener(listener, corrId);
                     }
                 }
+                // HAX: Issue #1690, Ford Sync bug returning incorrect display capabilities (https://github.com/smartdevicelink/sdl_java_suite/issues/1690). Save the next desired layout type to the update capabilities when the SetDisplayLayout response is received
+                if (FunctionID.SET_DISPLAY_LAYOUT.toString().equals(message.getFunctionName())) {
+                    lastDisplayLayoutRequestTemplate = ((SetDisplayLayout)message).getDisplayLayout();
+                }
             } else if (RPCMessage.KEY_RESPONSE.equals(message.getMessageType())) { // Response Specifics
                 RPCResponse response = (RPCResponse) message;
                 pm.setRPCType((byte) 0x01);
@@ -863,7 +882,17 @@ abstract class BaseLifecycleManager {
             }
 
         } catch (OutOfMemoryError e) {
-            e.printStackTrace();
+            DebugTool.logError(TAG,"Error attempting to send RPC message.", e);
+        }
+    }
+
+    // HAX: Issue #1690, Ford Sync bug returning incorrect display capabilities (https://github.com/smartdevicelink/sdl_java_suite/issues/1690). Use the initial capabilities from RAIR instead of the incorrect ones that are included in SetDisplayLayoutResponse.
+    void fixIncorrectDisplayCapabilities(RPCMessage rpc) {
+        if (RPCMessage.KEY_RESPONSE.equals(rpc.getMessageType()) && rpc.getFunctionName().equals(FunctionID.SET_DISPLAY_LAYOUT.toString()) &&
+                initialMediaCapabilities != null && PredefinedLayout.MEDIA.toString().equals(lastDisplayLayoutRequestTemplate)) {
+
+            SetDisplayLayoutResponse setDisplayLayoutResponse = (SetDisplayLayoutResponse) rpc;
+            setDisplayLayoutResponse.setDisplayCapabilities(initialMediaCapabilities);
         }
     }
 
@@ -886,6 +915,8 @@ abstract class BaseLifecycleManager {
                 DebugTool.logInfo(TAG, "RPC received - " + messageType);
 
                 rpc.format(rpcSpecVersion, true);
+
+                fixIncorrectDisplayCapabilities(rpc);
 
                 BaseLifecycleManager.this.onRPCReceived(rpc);
 
@@ -922,6 +953,7 @@ abstract class BaseLifecycleManager {
                 DebugTool.logWarning(TAG, String.format("Disconnecting from head unit, the configured minimum protocol version %s is greater than the supported protocol version %s", minimumProtocolVersion, getProtocolVersion()));
                 session.endService(SessionType.RPC);
                 clean();
+                onClose("Protocol version not supported: " + version, null, SdlDisconnectedReason.MINIMUM_PROTOCOL_VERSION_HIGHER_THAN_SUPPORTED);
                 return;
             }
 
@@ -932,6 +964,7 @@ abstract class BaseLifecycleManager {
                     DebugTool.logWarning(TAG, "Disconnecting from head unit, the system info was not accepted.");
                     session.endService(SessionType.RPC);
                     clean();
+                    onClose("System not supported", null, SdlDisconnectedReason.DEFAULT);
                     return;
                 }
                 //If the vehicle is acceptable, init security lib
@@ -1000,18 +1033,29 @@ abstract class BaseLifecycleManager {
 
         @Override
         public boolean isConnected() {
-            return BaseLifecycleManager.this.session.getIsConnected();
+            synchronized (BaseLifecycleManager.this) {
+                if (BaseLifecycleManager.this.session != null) {
+                    return BaseLifecycleManager.this.session.getIsConnected();
+                }
+            }
+            return false;
         }
 
         @Override
         public void addServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener) {
-            BaseLifecycleManager.this.session.addServiceListener(serviceType, sdlServiceListener);
+            synchronized (BaseLifecycleManager.this) {
+                if(BaseLifecycleManager.this.session != null ){
+                    BaseLifecycleManager.this.session.addServiceListener(serviceType, sdlServiceListener);
+                }
+            }
         }
 
         @Override
         public void removeServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener) {
-            if (BaseLifecycleManager.this.session != null) {
-                BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+            synchronized (BaseLifecycleManager.this) {
+                if (BaseLifecycleManager.this.session != null) {
+                    BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+                }
             }
         }
 
@@ -1079,14 +1123,25 @@ abstract class BaseLifecycleManager {
 
         @Override
         public boolean isTransportForServiceAvailable(SessionType serviceType) {
-            return BaseLifecycleManager.this.session.isTransportForServiceAvailable(serviceType);
+            synchronized (BaseLifecycleManager.this) {
+                if (BaseLifecycleManager.this.session != null) {
+                    return BaseLifecycleManager.this.session.isTransportForServiceAvailable(serviceType);
+                }
+            }
+            return false;
         }
 
         @NonNull
         @Override
         public SdlMsgVersion getSdlMsgVersion() {
-            SdlMsgVersion msgVersion = new SdlMsgVersion(rpcSpecVersion.getMajor(), rpcSpecVersion.getMinor());
-            msgVersion.setPatchVersion(rpcSpecVersion.getPatch());
+            SdlMsgVersion msgVersion;
+            if(rpcSpecVersion != null) {
+                msgVersion = new SdlMsgVersion(rpcSpecVersion.getMajor(), rpcSpecVersion.getMinor());
+                msgVersion.setPatchVersion(rpcSpecVersion.getPatch());
+            } else {
+                msgVersion = new SdlMsgVersion(1,0);
+            }
+
             return msgVersion;
         }
 
@@ -1098,7 +1153,12 @@ abstract class BaseLifecycleManager {
 
         @Override
         public long getMtu(SessionType serviceType) {
-            return BaseLifecycleManager.this.session.getMtu(serviceType);
+            synchronized (BaseLifecycleManager.this) {
+                if (BaseLifecycleManager.this.session != null) {
+                    return BaseLifecycleManager.this.session.getMtu(serviceType);
+                }
+            }
+            return SdlProtocolBase.V1_V2_MTU_SIZE;
         }
 
         @Override
@@ -1182,6 +1242,8 @@ abstract class BaseLifecycleManager {
     void clean() {
         firstTimeFull = true;
         currentHMIStatus = null;
+        lastDisplayLayoutRequestTemplate = null;
+        initialMediaCapabilities = null;
         if (rpcListeners != null) {
             rpcListeners.clear();
         }
