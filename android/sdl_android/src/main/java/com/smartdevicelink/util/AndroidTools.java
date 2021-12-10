@@ -32,6 +32,7 @@
 
 package com.smartdevicelink.util;
 
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -48,6 +49,7 @@ import android.content.res.XmlResourceParser;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Bundle;
 import androidx.annotation.Nullable;
 
@@ -68,6 +70,9 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.List;
+
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_SCAN;
 
 
 public class AndroidTools {
@@ -199,6 +204,24 @@ public class AndroidTools {
         return sdlAppInfoList;
     }
 
+    public static boolean areBtPermissionsGranted(Context context, String servicePackageName) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            //Permissions are only for SDK 31 and above
+            return true;
+        }
+        PackageManager packageManager = context.getPackageManager();
+        PackageInfo packageInfo;
+        try {
+            packageInfo = packageManager.getPackageInfo(servicePackageName, PackageManager.GET_PERMISSIONS);
+            int btConnectPermission = packageManager.checkPermission(BLUETOOTH_CONNECT, packageInfo.packageName);
+            int btScanPermission = packageManager.checkPermission(BLUETOOTH_SCAN, packageInfo.packageName);
+            return btConnectPermission == PackageManager.PERMISSION_GRANTED && btScanPermission == PackageManager.PERMISSION_GRANTED;
+        } catch (NameNotFoundException e) {
+            e.printStackTrace();
+            DebugTool.logError(TAG, "servicePackageName not found while checking BT permissions");
+            return false;
+        }
+    }
 
     /**
      * Sends the provided intent to the specified destinations making it an explicit intent, rather
@@ -227,6 +250,13 @@ public class AndroidTools {
             for (ResolveInfo app : apps) {
                 try {
                     intent.setClassName(app.activityInfo.applicationInfo.packageName, app.activityInfo.name);
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && intent.getBooleanExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, false)) {
+                        Intent pending = new Intent();
+                        PendingIntent pendingIntent = PendingIntent.getForegroundService(context, (int) System.currentTimeMillis(), pending, PendingIntent.FLAG_MUTABLE | Intent.FILL_IN_COMPONENT);
+                        intent.putExtra(TransportConstants.PENDING_INTENT_EXTRA, pendingIntent);
+                    }
+
                     context.sendBroadcast(intent);
                 } catch (Exception e) {
                     //In case there is missing info in the app reference we want to keep moving

@@ -70,6 +70,7 @@ import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 import android.os.RemoteException;
+import android.provider.Settings;
 import android.util.AndroidRuntimeException;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
@@ -202,6 +203,7 @@ public class SdlRouterService extends Service {
     private boolean wrongProcess = false;
     private boolean initPassed = false;
     private boolean hasCalledStartForeground = false;
+    private boolean hasConnectedBefore = false;
     boolean firstStart = true;
 
     public static HashMap<String, RegisteredApp> registeredApps;
@@ -215,6 +217,11 @@ public class SdlRouterService extends Service {
 
     private boolean startSequenceComplete = false;
     private VehicleType receivedVehicleType;
+    private boolean isConnectedOverUSB;
+    private boolean waitingForBTRuntimePermissions = false;
+    private Handler btPermissionsHandler;
+    private Runnable btPermissionsRunnable;
+    private final static int BT_PERMISSIONS_CHECK_FREQUENCY = 1000;
 
     private ExecutorService packetExecutor = null;
     ConcurrentHashMap<TransportType, PacketWriteTaskMaster> packetWriteTaskMasterMap = null;
@@ -1095,6 +1102,30 @@ public class SdlRouterService extends Service {
             DebugTool.logError(TAG, "Bluetooth Permission is not granted. Shutting down");
             return false;
         }
+
+        // If Android 12 or newer make sure we have BT Runtime permissions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AndroidTools.areBtPermissionsGranted(this, this.getPackageName())) {
+            if (isConnectedOverUSB) {
+                waitingForBTRuntimePermissions = true;
+                btPermissionsHandler = new Handler(Looper.myLooper());
+                btPermissionsRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!AndroidTools.areBtPermissionsGranted(SdlRouterService.this, SdlRouterService.this.getPackageName())) {
+                            btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
+                        } else {
+                            waitingForBTRuntimePermissions = false;
+                            initBluetoothSerialService();
+                        }
+                    }
+                };
+                btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
+                showBTPermissionsNotification();
+            } else {
+                return false;
+            }
+        }
+
         if (!AndroidTools.isServiceExported(this, new ComponentName(this, this.getClass()))) { //We want to check to see if our service is actually exported
             DebugTool.logError(TAG, "Service isn't exported. Shutting down");
             return false;
@@ -1123,7 +1154,6 @@ public class SdlRouterService extends Service {
 
         return true;
     }
-
 
     @Override
     public void onCreate() {
@@ -1159,6 +1189,7 @@ public class SdlRouterService extends Service {
                 if (info.getRouterServiceComponentName().equals(name) && listSize > i + 1) {
                     SdlAppInfo nextUp = sdlAppInfoList.get(i + 1);
                     Intent serviceIntent = new Intent();
+                    //Add check if it is second pass also add extra
                     serviceIntent.setComponent(nextUp.getRouterServiceComponentName());
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                         startService(serviceIntent);
@@ -1177,6 +1208,7 @@ public class SdlRouterService extends Service {
             DebugTool.logInfo(TAG, "No sdl apps found");
             return;
         }
+
         closing = true;
         closeBluetoothSerialServer();
         notifyAltTransportOfClose(TransportConstants.ROUTER_SHUTTING_DOWN_REASON_NEWER_SERVICE);
@@ -1256,6 +1288,9 @@ public class SdlRouterService extends Service {
                     (HashMap<String, Object>) intent.getSerializableExtra(TransportConstants.VEHICLE_INFO_EXTRA)
             );
         }
+        if (intent != null && intent.hasExtra(TransportConstants.CONNECTION_TYPE_EXTRA)) {
+            isConnectedOverUSB = TransportConstants.ACTION_USB_ACCESSORY_ATTACHED.equalsIgnoreCase(intent.getStringExtra(TransportConstants.CONNECTION_TYPE_EXTRA));
+        }
         // Only trusting the first intent received to start the RouterService and run initial checks to avoid a case where an app could send incorrect data after the spp connection has started.
         if (firstStart) {
             firstStart = false;
@@ -1284,6 +1319,7 @@ public class SdlRouterService extends Service {
         }
         if (intent != null) {
             if (intent.getBooleanExtra(FOREGROUND_EXTRA, false)) {
+                hasConnectedBefore = false;
                 hasCalledStartForeground = false;
 
                 if (!this.isPrimaryTransportConnected()) {    //If there is no transport connected we need to ensure the service is moved to the foreground
@@ -1296,6 +1332,7 @@ public class SdlRouterService extends Service {
                     }
                     boolean confirmedDevice = intent.getBooleanExtra(TransportConstants.CONFIRMED_SDL_DEVICE, false);
                     int timeout = getNotificationTimeout(address, confirmedDevice);
+                    hasConnectedBefore = hasSDLConnected(address);
 
                     enterForeground("Waiting for connection...", timeout, false);
                     resetForegroundTimeOut(timeout);
@@ -1499,6 +1536,10 @@ public class SdlRouterService extends Service {
             builder = new Notification.Builder(this, SDL_NOTIFICATION_CHANNEL_ID);
         }
 
+        if (hasConnectedBefore && android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+
         if (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)) { //If we are in debug mode, include what app has the router service open
             ComponentName name = new ComponentName(this, this.getClass());
             builder.setContentTitle("SDL: " + name.getPackageName());
@@ -1521,7 +1562,8 @@ public class SdlRouterService extends Service {
 
         // Create an intent that will be fired when the user clicks the notification.
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(SDL_NOTIFICATION_FAQS_PAGE));
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
+        int flag = android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, flag);
         builder.setContentIntent(pendingIntent);
 
         if (chronometerLength > (FOREGROUND_TIMEOUT / 1000) && android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -1569,12 +1611,22 @@ public class SdlRouterService extends Service {
     private void safeStartForeground(int id, Notification notification) {
         try {
             if (notification == null) {
-                //Try the NotificationCompat this time in case there was a previous error
-                NotificationCompat.Builder builder =
-                        new NotificationCompat.Builder(this, SDL_NOTIFICATION_CHANNEL_ID)
+                if (hasConnectedBefore && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    Notification.Builder builder =
+                            new Notification.Builder(this, SDL_NOTIFICATION_CHANNEL_ID)
                                 .setContentTitle("SmartDeviceLink")
-                                .setContentText("Service Running");
-                notification = builder.build();
+                                .setContentText("Service Running")
+                                .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+                    notification = builder.build();
+                } else {
+                    //Try the NotificationCompat this time in case there was a previous error
+                    NotificationCompat.Builder builder =
+                            new NotificationCompat.Builder(this, SDL_NOTIFICATION_CHANNEL_ID)
+                                    .setContentTitle("SmartDeviceLink")
+                                    .setContentText("Service Running");
+
+                    notification = builder.build();
+                }
             }
             startForeground(id, notification);
             DebugTool.logInfo(TAG, "Entered the foreground - " + System.currentTimeMillis());
@@ -1745,6 +1797,10 @@ public class SdlRouterService extends Service {
     }
 
     private synchronized void initBluetoothSerialService() {
+        if (waitingForBTRuntimePermissions) {
+            return;
+        }
+
         if (legacyModeEnabled) {
             DebugTool.logInfo(TAG, "Not starting own bluetooth during legacy mode");
             return;
@@ -1800,6 +1856,10 @@ public class SdlRouterService extends Service {
         }
 
         startService.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            startService.putExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, true);
+        }
 
         AndroidTools.sendExplicitBroadcast(getApplicationContext(), startService, null);
 
@@ -2877,6 +2937,9 @@ public class SdlRouterService extends Service {
         if (receivedVehicleType != null) {
             pingIntent.putExtra(TransportConstants.VEHICLE_INFO_EXTRA, receivedVehicleType.getStore());
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            pingIntent.putExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, true);
+        }
     }
 
     private void startClientPings() {
@@ -3805,6 +3868,10 @@ public class SdlRouterService extends Service {
         } else {
             builder = new Notification.Builder(getApplicationContext(), TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID);
         }
+
+        if (hasConnectedBefore && android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+        }
         ComponentName name = new ComponentName(this, this.getClass());
         if (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)) { //If we are in debug mode, include what app has the router service open
             builder.setContentTitle("SDL: " + name.getPackageName());
@@ -3841,6 +3908,61 @@ public class SdlRouterService extends Service {
             notificationManager.notify(tag, TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID_INT, notification);
         } else {
             DebugTool.logError(TAG, "notifySppError: Unable to retrieve notification Manager service");
+        }
+    }
+
+    private void showBTPermissionsNotification() {
+        Notification.Builder builder;
+        if (android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder = new Notification.Builder(getApplicationContext());
+        } else {
+            builder = new Notification.Builder(getApplicationContext(), TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID);
+        }
+
+        ComponentName name = new ComponentName(this, this.getClass());
+        if (0 != (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)) { //If we are in debug mode, include what app has the router service open
+            builder.setContentTitle("SDL: " + name.getPackageName());
+        } else {
+            builder.setContentTitle(getString(R.string.notification_title));
+        }
+        builder.setTicker(getString(R.string.sdl_error_notification_channel_name));
+        builder.setContentText(getString(R.string.allow_bluetooth_permissions));
+
+        //We should use icon from library resources if available
+        int trayId = getResources().getIdentifier("sdl_tray_icon", "drawable", getPackageName());
+
+        builder.setSmallIcon(trayId);
+        Bitmap icon = BitmapFactory.decodeResource(getResources(), R.drawable.spp_error);
+        builder.setLargeIcon(icon);
+
+        builder.setOngoing(false);
+        builder.setAutoCancel(true);
+
+        // Create an intent that will be fired when the user clicks the notification.
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        Uri uri = Uri.fromParts("package", getPackageName(), null);
+        intent.setData(uri);
+        int flag = android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_IMMUTABLE : 0;
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, flag);
+        builder.setContentIntent(pendingIntent);
+
+        final String tag = "SDL";
+        //Now we need to add a notification channel
+        final NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.cancel(tag, TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID_INT);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel notificationChannel = new NotificationChannel(TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID, getString(R.string.sdl_error_notification_channel_name), NotificationManager.IMPORTANCE_HIGH);
+                notificationChannel.enableLights(true);
+                notificationChannel.enableVibration(true);
+                notificationChannel.setShowBadge(false);
+                notificationManager.createNotificationChannel(notificationChannel);
+                builder.setChannelId(notificationChannel.getId());
+            }
+            Notification notification = builder.build();
+            notificationManager.notify(tag, TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID_INT, notification);
+        } else {
+            DebugTool.logError(TAG, "Unable to retrieve notification Manager service");
         }
     }
 }
