@@ -32,7 +32,6 @@
 
 package com.smartdevicelink.util;
 
-import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -204,21 +203,22 @@ public class AndroidTools {
         return sdlAppInfoList;
     }
 
-    public static boolean areBtPermissionsGranted(Context context, String servicePackageName) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            //Permissions are only for SDK 31 and above
-            return true;
-        }
+    public static boolean isPermissionGranted(String permissionName, Context context, String servicePackageName) {
         PackageManager packageManager = context.getPackageManager();
+        if (packageManager == null) {
+            return false;
+        }
         PackageInfo packageInfo;
         try {
             packageInfo = packageManager.getPackageInfo(servicePackageName, PackageManager.GET_PERMISSIONS);
-            int btConnectPermission = packageManager.checkPermission(BLUETOOTH_CONNECT, packageInfo.packageName);
-            int btScanPermission = packageManager.checkPermission(BLUETOOTH_SCAN, packageInfo.packageName);
-            return btConnectPermission == PackageManager.PERMISSION_GRANTED && btScanPermission == PackageManager.PERMISSION_GRANTED;
+            if (packageInfo == null) {
+                return false;
+            }
+            int permissionResult = packageManager.checkPermission(permissionName, packageInfo.packageName);
+            return permissionResult == PackageManager.PERMISSION_GRANTED;
         } catch (NameNotFoundException e) {
             e.printStackTrace();
-            DebugTool.logError(TAG, "servicePackageName not found while checking BT permissions");
+            DebugTool.logError(TAG, "servicePackageName not found while checking " + permissionName + " permission", e);
             return false;
         }
     }
@@ -250,13 +250,6 @@ public class AndroidTools {
             for (ResolveInfo app : apps) {
                 try {
                     intent.setClassName(app.activityInfo.applicationInfo.packageName, app.activityInfo.name);
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && intent.getBooleanExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, false)) {
-                        Intent pending = new Intent();
-                        PendingIntent pendingIntent = PendingIntent.getForegroundService(context, (int) System.currentTimeMillis(), pending, PendingIntent.FLAG_MUTABLE | Intent.FILL_IN_COMPONENT);
-                        intent.putExtra(TransportConstants.PENDING_INTENT_EXTRA, pendingIntent);
-                    }
-
                     context.sendBroadcast(intent);
                 } catch (Exception e) {
                     //In case there is missing info in the app reference we want to keep moving
@@ -361,7 +354,7 @@ public class AndroidTools {
      *
      * @param context a context to access Android system services through.
      * @param component a component name of a LocalRouterService.
-     * @param manifestFieldId a string resources id that indicates an unique name for the vehicle data in the manifest.
+     * @param manifestFieldId a string resources id that indicates a unique name for the vehicle data in the manifest.
      * @return The list of vehicle types, or null if an error occurred or field was not found.
      */
     public static @Nullable List<VehicleType> getVehicleTypesFromManifest(Context context, ComponentName component, int manifestFieldId) {
@@ -392,10 +385,10 @@ public class AndroidTools {
             XmlResourceParser parser = resources.getXml(xmlFieldId);
             return SdlAppInfo.deserializeSupportedVehicles(parser);
         } catch (PackageManager.NameNotFoundException e) {
-            DebugTool.logError(TAG, "Failed to get OEM vehicle data filter: " + e.getMessage()+ " - assume vehicle data is supported");
+            DebugTool.logError(TAG, "Failed to get OEM vehicle data filter: " + e.getMessage() + " - assume vehicle data is supported");
             return null;
         } catch (Resources.NotFoundException ex) {
-            DebugTool.logError(TAG, "Failed to find resource: " + ex.getMessage()+ " - assume vehicle data is supported");
+            DebugTool.logError(TAG, "Failed to find resource: " + ex.getMessage() + " - assume vehicle data is supported");
             return null;
         }
     }

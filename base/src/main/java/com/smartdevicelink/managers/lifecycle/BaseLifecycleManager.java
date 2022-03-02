@@ -119,6 +119,8 @@ abstract class BaseLifecycleManager {
             ON_UPDATE_LISTENER_LOCK = new Object(),
             ON_REQUEST_LISTENER_LOCK = new Object(),
             ON_NOTIFICATION_LISTENER_LOCK = new Object();
+    protected static final Object SESSION_LOCK = new Object();
+
 
     SdlSession session;
     final AppConfig appConfig;
@@ -159,9 +161,13 @@ abstract class BaseLifecycleManager {
 
     public void start() {
         try {
-            session.startSession();
+            synchronized (SESSION_LOCK) {
+                if (session != null) {
+                    session.startSession();
+                }
+            }
         } catch (SdlException e) {
-            DebugTool.logError(TAG,"Error attempting to start session", e);
+            DebugTool.logError(TAG, "Error attempting to start session", e);
         }
     }
 
@@ -169,15 +175,19 @@ abstract class BaseLifecycleManager {
      * Start a secured RPC service
      */
     public void startRPCEncryption() {
-        if (session != null) {
-            session.startService(SessionType.RPC, true);
+        synchronized (SESSION_LOCK) {
+            if (session != null) {
+                session.startService(SessionType.RPC, true);
+            }
         }
     }
 
     public synchronized void stop() {
-        if (session != null) {
-            session.close();
-            session = null;
+        synchronized (SESSION_LOCK) {
+            if (session != null) {
+                session.close();
+                session = null;
+            }
         }
         if (taskmaster != null) {
             taskmaster.shutdown();
@@ -202,8 +212,10 @@ abstract class BaseLifecycleManager {
     }
 
     Version getProtocolVersion() {
-        if (session != null && session.getProtocolVersion() != null) {
-            return session.getProtocolVersion();
+        synchronized (SESSION_LOCK) {
+            if (session != null && session.getProtocolVersion() != null) {
+                return session.getProtocolVersion();
+            }
         }
         return new Version(1, 0, 0);
     }
@@ -309,10 +321,12 @@ abstract class BaseLifecycleManager {
     }
 
     private boolean isConnected() {
-        if (session != null) {
-            return session.getIsConnected();
-        } else {
-            return false;
+        synchronized (SESSION_LOCK) {
+            if (session != null) {
+                return session.getIsConnected();
+            } else {
+                return false;
+            }
         }
     }
 
@@ -407,7 +421,14 @@ abstract class BaseLifecycleManager {
                             VehicleType vehicleType = raiResponse.getVehicleType();
                             String systemSoftwareVersion = raiResponse.getSystemSoftwareVersion();
                             if (vehicleType != null || systemSoftwareVersion != null) {
-                                saveVehicleType(session.getActiveTransports(), vehicleType);
+
+                                List<TransportRecord> activeTransports = null;
+                                synchronized (SESSION_LOCK) {
+                                    if (session != null) {
+                                        activeTransports = session.getActiveTransports();
+                                    }
+                                }
+                                saveVehicleType(activeTransports, vehicleType);
                                 SystemInfo systemInfo = new SystemInfo(vehicleType, systemSoftwareVersion, null);
                                 boolean validSystemInfo = lifecycleListener.onSystemInfoReceived(systemInfo);
                                 if (!validSystemInfo) {
@@ -810,8 +831,10 @@ abstract class BaseLifecycleManager {
 
             final ProtocolMessage pm = new ProtocolMessage();
             pm.setData(msgBytes);
-            if (session != null) {
-                pm.setSessionID((byte) session.getSessionId());
+            synchronized (SESSION_LOCK) {
+                if (session != null) {
+                    pm.setSessionID((byte) session.getSessionId());
+                }
             }
 
             pm.setMessageType(MessageType.RPC);
@@ -854,7 +877,7 @@ abstract class BaseLifecycleManager {
                 }
                 // HAX: Issue #1690, Ford Sync bug returning incorrect display capabilities (https://github.com/smartdevicelink/sdl_java_suite/issues/1690). Save the next desired layout type to the update capabilities when the SetDisplayLayout response is received
                 if (FunctionID.SET_DISPLAY_LAYOUT.toString().equals(message.getFunctionName())) {
-                    lastDisplayLayoutRequestTemplate = ((SetDisplayLayout)message).getDisplayLayout();
+                    lastDisplayLayoutRequestTemplate = ((SetDisplayLayout) message).getDisplayLayout();
                 }
             } else if (RPCMessage.KEY_RESPONSE.equals(message.getMessageType())) { // Response Specifics
                 RPCResponse response = (RPCResponse) message;
@@ -879,12 +902,14 @@ abstract class BaseLifecycleManager {
                 pm.setPriorityCoefficient(1);
             }
 
-            if (session != null) {
-                session.sendMessage(pm);
+            synchronized (SESSION_LOCK) {
+                if (session != null) {
+                    session.sendMessage(pm);
+                }
             }
 
         } catch (OutOfMemoryError e) {
-            DebugTool.logError(TAG,"Error attempting to send RPC message.", e);
+            DebugTool.logError(TAG, "Error attempting to send RPC message.", e);
         }
     }
 
@@ -953,7 +978,11 @@ abstract class BaseLifecycleManager {
             DebugTool.logInfo(TAG, "on protocol session started");
             if (minimumProtocolVersion != null && minimumProtocolVersion.isNewerThan(version) == 1) {
                 DebugTool.logWarning(TAG, String.format("Disconnecting from head unit, the configured minimum protocol version %s is greater than the supported protocol version %s", minimumProtocolVersion, getProtocolVersion()));
-                session.endService(SessionType.RPC);
+                synchronized (SESSION_LOCK) {
+                    if (session != null) {
+                        session.endService(SessionType.RPC);
+                    }
+                }
                 clean();
                 onClose("Protocol version not supported: " + version, null, SdlDisconnectedReason.MINIMUM_PROTOCOL_VERSION_HIGHER_THAN_SUPPORTED);
                 return;
@@ -961,14 +990,24 @@ abstract class BaseLifecycleManager {
 
             if (systemInfo != null && lifecycleListener != null) {
                 didCheckSystemInfo = true;
-                saveVehicleType(session.getActiveTransports(), systemInfo.getVehicleType());
+                List<TransportRecord> activeTransports = null;
+                synchronized (SESSION_LOCK) {
+                    if (session != null) {
+                        activeTransports = session.getActiveTransports();
+                    }
+                }
+                saveVehicleType(activeTransports, systemInfo.getVehicleType());
                 boolean validSystemInfo = lifecycleListener.onSystemInfoReceived(systemInfo);
                 if (!validSystemInfo) {
                     DebugTool.logWarning(TAG, "Disconnecting from head unit, the system info was not accepted.");
-                    session.endService(SessionType.RPC);
-                    clean();
-                    onClose("System not supported", null, SdlDisconnectedReason.DEFAULT);
-                    return;
+                    synchronized (SESSION_LOCK) {
+                        if (session != null) {
+                            session.endService(SessionType.RPC);
+                        }
+                        clean();
+                        onClose("System not supported", null, SdlDisconnectedReason.DEFAULT);
+                        return;
+                    }
                 }
                 //If the vehicle is acceptable, init security lib
                 setSecurityLibraryIfAvailable(systemInfo.getVehicleType());
@@ -1037,8 +1076,10 @@ abstract class BaseLifecycleManager {
         @Override
         public boolean isConnected() {
             synchronized (BaseLifecycleManager.this) {
-                if (BaseLifecycleManager.this.session != null) {
-                    return BaseLifecycleManager.this.session.getIsConnected();
+                synchronized (SESSION_LOCK) {
+                    if (BaseLifecycleManager.this.session != null) {
+                        return BaseLifecycleManager.this.session.getIsConnected();
+                    }
                 }
             }
             return false;
@@ -1047,8 +1088,10 @@ abstract class BaseLifecycleManager {
         @Override
         public void addServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener) {
             synchronized (BaseLifecycleManager.this) {
-                if(BaseLifecycleManager.this.session != null ){
-                    BaseLifecycleManager.this.session.addServiceListener(serviceType, sdlServiceListener);
+                synchronized (SESSION_LOCK) {
+                    if (BaseLifecycleManager.this.session != null) {
+                        BaseLifecycleManager.this.session.addServiceListener(serviceType, sdlServiceListener);
+                    }
                 }
             }
         }
@@ -1056,8 +1099,10 @@ abstract class BaseLifecycleManager {
         @Override
         public void removeServiceListener(SessionType serviceType, ISdlServiceListener sdlServiceListener) {
             synchronized (BaseLifecycleManager.this) {
-                if (BaseLifecycleManager.this.session != null) {
-                    BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+                synchronized (SESSION_LOCK) {
+                    if (BaseLifecycleManager.this.session != null) {
+                        BaseLifecycleManager.this.session.removeServiceListener(serviceType, sdlServiceListener);
+                    }
                 }
             }
         }
@@ -1127,8 +1172,10 @@ abstract class BaseLifecycleManager {
         @Override
         public boolean isTransportForServiceAvailable(SessionType serviceType) {
             synchronized (BaseLifecycleManager.this) {
-                if (BaseLifecycleManager.this.session != null) {
-                    return BaseLifecycleManager.this.session.isTransportForServiceAvailable(serviceType);
+                synchronized (SESSION_LOCK) {
+                    if (BaseLifecycleManager.this.session != null) {
+                        return BaseLifecycleManager.this.session.isTransportForServiceAvailable(serviceType);
+                    }
                 }
             }
             return false;
@@ -1138,11 +1185,11 @@ abstract class BaseLifecycleManager {
         @Override
         public SdlMsgVersion getSdlMsgVersion() {
             SdlMsgVersion msgVersion;
-            if(rpcSpecVersion != null) {
+            if (rpcSpecVersion != null) {
                 msgVersion = new SdlMsgVersion(rpcSpecVersion.getMajor(), rpcSpecVersion.getMinor());
                 msgVersion.setPatchVersion(rpcSpecVersion.getPatch());
             } else {
-                msgVersion = new SdlMsgVersion(1,0);
+                msgVersion = new SdlMsgVersion(1, 0);
             }
 
             return msgVersion;
@@ -1157,8 +1204,10 @@ abstract class BaseLifecycleManager {
         @Override
         public long getMtu(SessionType serviceType) {
             synchronized (BaseLifecycleManager.this) {
-                if (BaseLifecycleManager.this.session != null) {
-                    return BaseLifecycleManager.this.session.getMtu(serviceType);
+                synchronized (SESSION_LOCK) {
+                    if (BaseLifecycleManager.this.session != null) {
+                        return BaseLifecycleManager.this.session.getMtu(serviceType);
+                    }
                 }
             }
             return SdlProtocolBase.V1_V2_MTU_SIZE;
@@ -1259,8 +1308,10 @@ abstract class BaseLifecycleManager {
         if (rpcRequestListeners != null) {
             rpcRequestListeners.clear();
         }
-        if (session != null && session.getIsConnected()) {
-            session.close();
+        synchronized (SESSION_LOCK) {
+            if (session != null && session.getIsConnected()) {
+                session.close();
+            }
         }
         if (encryptionLifecycleManager != null) {
             encryptionLifecycleManager.dispose();
@@ -1315,9 +1366,11 @@ abstract class BaseLifecycleManager {
             if ((sec != null) && (sec.getMakeList() != null)) {
                 if (sec.getMakeList().contains(make)) {
                     sec.setAppId(appConfig.getAppID());
-                    if (session != null) {
-                        session.setSdlSecurity(sec);
-                        sec.handleSdlSession(session);
+                    synchronized (SESSION_LOCK) {
+                        if (session != null) {
+                            session.setSdlSecurity(sec);
+                            sec.handleSdlSession(session);
+                        }
                     }
                     return;
                 }
@@ -1345,7 +1398,7 @@ abstract class BaseLifecycleManager {
 
     abstract void cycle(SdlDisconnectedReason disconnectedReason);
 
-    void saveVehicleType(String address, VehicleType type){
+    void saveVehicleType(String address, VehicleType type) {
     }
 
     void saveVehicleType(List<TransportRecord> activeTransports, VehicleType type) {

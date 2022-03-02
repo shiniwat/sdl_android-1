@@ -120,6 +120,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
+import static android.Manifest.permission.BLUETOOTH_SCAN;
 import static com.smartdevicelink.transport.TransportConstants.CONNECTED_DEVICE_STRING_EXTRA_NAME;
 import static com.smartdevicelink.transport.TransportConstants.FOREGROUND_EXTRA;
 import static com.smartdevicelink.transport.TransportConstants.FORMED_PACKET_EXTRA_NAME;
@@ -143,7 +145,7 @@ public class SdlRouterService extends Service {
     /**
      * <b> NOTE: DO NOT MODIFY THIS UNLESS YOU KNOW WHAT YOU'RE DOING.</b>
      */
-    protected static final int ROUTER_SERVICE_VERSION_NUMBER = 15;
+    protected static final int ROUTER_SERVICE_VERSION_NUMBER = 16;
 
     private static final String ROUTER_SERVICE_PROCESS = "com.smartdevicelink.router";
 
@@ -217,7 +219,6 @@ public class SdlRouterService extends Service {
 
     private boolean startSequenceComplete = false;
     private VehicleType receivedVehicleType;
-    private boolean isConnectedOverUSB;
     private boolean waitingForBTRuntimePermissions = false;
     private Handler btPermissionsHandler;
     private Runnable btPermissionsRunnable;
@@ -372,6 +373,11 @@ public class SdlRouterService extends Service {
 
             switch (msg.what) {
                 case TransportConstants.ROUTER_REQUEST_BT_CLIENT_CONNECT:
+                    //Starting with Android 12 this use case will require the BLUETOOTH_SCAN PERMISSION
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AndroidTools.isPermissionGranted(BLUETOOTH_SCAN, service.getApplicationContext(), service.getPackageName())) {
+                        DebugTool.logError(TAG, "BLUETOOTH_SCAN Permissions not granted for this app");
+                        break;
+                    }
                     if (receivedBundle.getBoolean(TransportConstants.CONNECT_AS_CLIENT_BOOLEAN_EXTRA, false)
                             && !connectAsClient) {        //We check this flag to make sure we don't try to connect over and over again. On D/C we should set to false
                         //Log.d(TAG,"Attempting to connect as bt client");
@@ -1092,7 +1098,7 @@ public class SdlRouterService extends Service {
      *
      * @return true if this service is set up correctly
      */
-    private boolean initCheck() {
+    private boolean initCheck(boolean isConnectedOverUSB) {
         if (!processCheck()) {
             DebugTool.logError(TAG, "Not using correct process. Shutting down");
             wrongProcess = true;
@@ -1103,25 +1109,9 @@ public class SdlRouterService extends Service {
             return false;
         }
 
-        // If Android 12 or newer make sure we have BT Runtime permissions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AndroidTools.areBtPermissionsGranted(this, this.getPackageName())) {
-            if (isConnectedOverUSB) {
-                waitingForBTRuntimePermissions = true;
-                btPermissionsHandler = new Handler(Looper.myLooper());
-                btPermissionsRunnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        if (!AndroidTools.areBtPermissionsGranted(SdlRouterService.this, SdlRouterService.this.getPackageName())) {
-                            btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
-                        } else {
-                            waitingForBTRuntimePermissions = false;
-                            initBluetoothSerialService();
-                        }
-                    }
-                };
-                btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
-                showBTPermissionsNotification();
-            } else {
+        // If Android 12 or newer make sure we have BLUETOOTH_CONNECT Runtime permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AndroidTools.isPermissionGranted(BLUETOOTH_CONNECT, this, this.getPackageName())) {
+            if (!isConnectedOverUSB) { //If BLUETOOTH_CONNECT permission is not granted We want to make sure we are connected over USB
                 return false;
             }
         }
@@ -1154,6 +1144,7 @@ public class SdlRouterService extends Service {
 
         return true;
     }
+
 
     @Override
     public void onCreate() {
@@ -1189,7 +1180,6 @@ public class SdlRouterService extends Service {
                 if (info.getRouterServiceComponentName().equals(name) && listSize > i + 1) {
                     SdlAppInfo nextUp = sdlAppInfoList.get(i + 1);
                     Intent serviceIntent = new Intent();
-                    //Add check if it is second pass also add extra
                     serviceIntent.setComponent(nextUp.getRouterServiceComponentName());
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                         startService(serviceIntent);
@@ -1208,7 +1198,6 @@ public class SdlRouterService extends Service {
             DebugTool.logInfo(TAG, "No sdl apps found");
             return;
         }
-
         closing = true;
         closeBluetoothSerialServer();
         notifyAltTransportOfClose(TransportConstants.ROUTER_SHUTTING_DOWN_REASON_NEWER_SERVICE);
@@ -1288,13 +1277,14 @@ public class SdlRouterService extends Service {
                     (HashMap<String, Object>) intent.getSerializableExtra(TransportConstants.VEHICLE_INFO_EXTRA)
             );
         }
+        boolean isConnectedOverUSB = false;
         if (intent != null && intent.hasExtra(TransportConstants.CONNECTION_TYPE_EXTRA)) {
-            isConnectedOverUSB = TransportConstants.ACTION_USB_ACCESSORY_ATTACHED.equalsIgnoreCase(intent.getStringExtra(TransportConstants.CONNECTION_TYPE_EXTRA));
+            isConnectedOverUSB = TransportConstants.AOA_USB.equalsIgnoreCase(intent.getStringExtra(TransportConstants.CONNECTION_TYPE_EXTRA));
         }
         // Only trusting the first intent received to start the RouterService and run initial checks to avoid a case where an app could send incorrect data after the spp connection has started.
         if (firstStart) {
             firstStart = false;
-            if (!initCheck()) { // Run checks on process and permissions
+            if (!initCheck(isConnectedOverUSB)) { // Run checks on process and permissions
                 deployNextRouterService();
                 closeSelf();
                 return START_REDELIVER_INTENT;
@@ -1319,7 +1309,6 @@ public class SdlRouterService extends Service {
         }
         if (intent != null) {
             if (intent.getBooleanExtra(FOREGROUND_EXTRA, false)) {
-                hasConnectedBefore = false;
                 hasCalledStartForeground = false;
 
                 if (!this.isPrimaryTransportConnected()) {    //If there is no transport connected we need to ensure the service is moved to the foreground
@@ -1372,6 +1361,10 @@ public class SdlRouterService extends Service {
         if (altTransportTimerHandler != null) {
             altTransportTimerHandler.removeCallbacks(altTransportTimerRunnable);
             altTransportTimerHandler = null;
+        }
+
+        if (btPermissionsHandler != null && btPermissionsRunnable != null) {
+            btPermissionsHandler.removeCallbacks(btPermissionsRunnable);
         }
 
         DebugTool.logWarning(TAG, "Sdl Router Service Destroyed");
@@ -1736,6 +1729,9 @@ public class SdlRouterService extends Service {
      */
     @SuppressWarnings("MissingPermission")
     private boolean bluetoothAvailable() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !AndroidTools.isPermissionGranted(BLUETOOTH_CONNECT, SdlRouterService.this, SdlRouterService.this.getPackageName())) {
+            return false;
+        }
         try {
             return (!(BluetoothAdapter.getDefaultAdapter() == null) && BluetoothAdapter.getDefaultAdapter().isEnabled());
         } catch (NullPointerException e) { // only for BluetoothAdapter.getDefaultAdapter().isEnabled() call
@@ -1798,6 +1794,7 @@ public class SdlRouterService extends Service {
 
     private synchronized void initBluetoothSerialService() {
         if (waitingForBTRuntimePermissions) {
+            DebugTool.logWarning(TAG, "This app has not been granted the BLUETOOTH_CONNECT runtime permission");
             return;
         }
 
@@ -1858,7 +1855,14 @@ public class SdlRouterService extends Service {
         startService.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            startService.putExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, true);
+            //Starting in Android 12 we need to start services from a foreground context
+            //To enable developers to be able to start their SdlService from the "background"
+            //we will attach a pendingIntent as an extra to the intent
+            //the developer can use this pendingIntent to start their SdlService from the context of
+            //the active RouterService
+            Intent pending = new Intent();
+            PendingIntent pendingIntent = PendingIntent.getForegroundService(this, (int) System.currentTimeMillis(), pending, PendingIntent.FLAG_MUTABLE | Intent.FILL_IN_COMPONENT);
+            startService.putExtra(TransportConstants.PENDING_INTENT_EXTRA, pendingIntent);
         }
 
         AndroidTools.sendExplicitBroadcast(getApplicationContext(), startService, null);
@@ -1867,6 +1871,31 @@ public class SdlRouterService extends Service {
         if (!(registeredApps == null || registeredApps.isEmpty())) {
             //If we have clients
             notifyClients(createHardwareConnectedMessage(record));
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && TransportType.USB.equals(record.getType()) && !AndroidTools.isPermissionGranted(BLUETOOTH_CONNECT, SdlRouterService.this, SdlRouterService.this.getPackageName())) {
+            //Delay starting bluetoothTransport when we are connected over USB and the app does not have the BLUETOOTH_CONNECT permissions
+            waitingForBTRuntimePermissions = true;
+            btPermissionsHandler = new Handler(Looper.myLooper());
+            //Continuously Check for the BLUETOOTH_CONNECT Permission
+            btPermissionsRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!AndroidTools.isPermissionGranted(BLUETOOTH_CONNECT, SdlRouterService.this, SdlRouterService.this.getPackageName())) {
+                        btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
+                    } else {
+                        waitingForBTRuntimePermissions = false;
+                        initBluetoothSerialService();
+                        final NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                        if(notificationManager != null) {
+                            notificationManager.cancel("SDL", TransportConstants.SDL_ERROR_NOTIFICATION_CHANNEL_ID_INT);
+                        }
+                    }
+                }
+            };
+            btPermissionsHandler.postDelayed(btPermissionsRunnable, BT_PERMISSIONS_CHECK_FREQUENCY);
+            //Present Notification to take user to permissions page for the app
+            showBTPermissionsNotification();
         }
     }
 
@@ -2002,7 +2031,7 @@ public class SdlRouterService extends Service {
                     bluetoothTransport.setStateManually(MultiplexBluetoothTransport.STATE_NONE);
                     bluetoothTransport = null;
                 }
-                if (errorBundle != null && errorBundle.getByte(MultiplexBaseTransport.ERROR_REASON_KEY) == MultiplexBaseTransport.REASON_SPP_ERROR) {
+                if (errorBundle != null && errorBundle.getByte(MultiplexBaseTransport.ERROR_REASON_KEY) == MultiplexBaseTransport.REASON_SPP_ERROR && bluetoothAvailable()) {
                     notifySppError();
                 }
                 break;
@@ -2527,7 +2556,7 @@ public class SdlRouterService extends Service {
     /**
      * Checks to see if a device address has connected to SDL before.
      *
-     * @param address the mac address of the device in quesiton
+     * @param address the mac address of the device in question
      * @return if this is the first status check of this device
      */
     protected boolean isFirstStatusCheck(String address) {
@@ -2538,7 +2567,7 @@ public class SdlRouterService extends Service {
     /**
      * Checks to see if a device address has connected to SDL before.
      *
-     * @param address the mac address of the device in quesiton
+     * @param address the mac address of the device in question
      * @return if an SDL connection has ever been established with this device
      */
     protected boolean hasSDLConnected(String address) {
@@ -2803,8 +2832,8 @@ public class SdlRouterService extends Service {
     }
 
     /* ****************************************************************************************************************************************
-	// ***********************************************************   LEGACY   ****************************************************************
-	//*****************************************************************************************************************************************/
+    // ***********************************************************   LEGACY   ****************************************************************
+    //*****************************************************************************************************************************************/
     private boolean legacyModeEnabled = false;
 
     private void enableLegacyMode(boolean enable) {
@@ -2821,9 +2850,9 @@ public class SdlRouterService extends Service {
 
     }
 
-	/* ****************************************************************************************************************************************
-	// ***********************************************************   UTILITY   ****************************************************************
-	//*****************************************************************************************************************************************/
+    /* ****************************************************************************************************************************************
+    // ***********************************************************   UTILITY   ****************************************************************
+    //*****************************************************************************************************************************************/
 
     private void debugPacket(byte[] bytes) {
         //DEBUG
@@ -2937,9 +2966,6 @@ public class SdlRouterService extends Service {
         if (receivedVehicleType != null) {
             pingIntent.putExtra(TransportConstants.VEHICLE_INFO_EXTRA, receivedVehicleType.getStore());
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            pingIntent.putExtra(TransportConstants.PENDING_BOOLEAN_EXTRA, true);
-        }
     }
 
     private void startClientPings() {
@@ -3005,9 +3031,9 @@ public class SdlRouterService extends Service {
         pingIntent = null;
     }
 
-	/* ****************************************************************************************************************************************
-	// **********************************************************   TINY CLASSES   ************************************************************
-	//*****************************************************************************************************************************************/
+    /* ****************************************************************************************************************************************
+    // **********************************************************   TINY CLASSES   ************************************************************
+    //*****************************************************************************************************************************************/
 
     /**
      * This class enables us to compare two router services
@@ -3036,7 +3062,7 @@ public class SdlRouterService extends Service {
         /**
          * Check if input is newer than this version
          *
-         * @param service a reference to another possible router service that is in quesiton
+         * @param service a reference to another possible router service that is in question
          * @return if the supplied service is newer than this one
          */
         public boolean isNewer(@SuppressWarnings("deprecation") LocalRouterService service) {
@@ -3201,9 +3227,9 @@ public class SdlRouterService extends Service {
             return appId;
         }
 
-		/*public long getAppId() {
-			return appId;
-		}*/
+        /*public long getAppId() {
+            return appId;
+        }*/
 
         /**
          * This is a convenience variable and may not be used or useful in different protocols

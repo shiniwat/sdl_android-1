@@ -13,7 +13,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
-import static android.Manifest.permission.BLUETOOTH_SCAN;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -26,29 +25,24 @@ public class MainActivity extends AppCompatActivity {
 
 
         if (BuildConfig.TRANSPORT.equals("MULTI") || BuildConfig.TRANSPORT.equals("MULTI_HB")) {
-            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (!checkPermission()) {
-                    requestPermission();
-                }
-            } else {
-                //If we are connected to a module we want to start our SdlService
-                SdlReceiver.queryForConnectedService(this);
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !checkPermission()) {
+                requestPermission();
+                return;
             }
-        } else {
+            //If we are connected to a module we want to start our SdlService
+            SdlReceiver.queryForConnectedService(this);
+        } else if (BuildConfig.TRANSPORT.equals("TCP")){
             Intent proxyIntent = new Intent(this, SdlService.class);
             startService(proxyIntent);
         }
     }
 
     private boolean checkPermission() {
-        int btConnectPermission = ContextCompat.checkSelfPermission(getApplicationContext(), BLUETOOTH_CONNECT);
-        int btScanPermission = ContextCompat.checkSelfPermission(getApplicationContext(), BLUETOOTH_SCAN);
-
-        return btConnectPermission == PackageManager.PERMISSION_GRANTED && btScanPermission == PackageManager.PERMISSION_GRANTED;
+        return PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(getApplicationContext(), BLUETOOTH_CONNECT);
     }
 
     private void requestPermission() {
-        ActivityCompat.requestPermissions(this, new String[]{BLUETOOTH_CONNECT, BLUETOOTH_SCAN}, REQUEST_CODE);
+        ActivityCompat.requestPermissions(this, new String[]{BLUETOOTH_CONNECT}, REQUEST_CODE);
     }
 
     @Override
@@ -57,10 +51,9 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_CODE:
                 if (grantResults.length > 0) {
 
-                    boolean connectAccepted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
-                    boolean scanAccepted = grantResults[1] == PackageManager.PERMISSION_GRANTED;
+                    boolean btConnectGranted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
 
-                    if (connectAccepted && scanAccepted) {
+                    if (btConnectGranted) {
                         SdlReceiver.queryForConnectedService(this);
                     }
                 }
