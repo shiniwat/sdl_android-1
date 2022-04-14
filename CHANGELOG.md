@@ -9,6 +9,20 @@
 
 ## Bug Fixes / Enhancements:
 
+- [Video auto restarts streaming regardless if HMI level is streamable ](https://github.com/smartdevicelink/sdl_java_suite/issues/1807)
+
+- [Video Streaming Fails on Android 12 at Low Resolutions](https://github.com/smartdevicelink/sdl_java_suite/issues/1803)
+
+- [sdl_java_se uses deprecated testCompile in build.gradle](https://github.com/smartdevicelink/sdl_java_suite/issues/1805)
+
+- [Incorrect behavior and potential crashes in PresentAlertOperation.supportsSoftButtonImages()](https://github.com/smartdevicelink/sdl_java_suite/issues/1800)
+
+- [Bugfix/rs notification issue usb](https://github.com/smartdevicelink/sdl_java_suite/pull/1797)
+
+- [Attempting to Send Voice Command with No Strings Fails to Log Error](https://github.com/smartdevicelink/sdl_java_suite/issues/1798)
+
+- [Fix LCM to close down properly](https://github.com/smartdevicelink/sdl_java_suite/pull/1796)
+
 - [Cleanup/proposal sdl 0286 spacing](https://github.com/smartdevicelink/sdl_java_suite/pull/1782)
 
 - [API Reference Docs Typos](https://github.com/smartdevicelink/sdl_java_suite/issues/1792)
@@ -39,5 +53,5 @@
 
 - [Menu Manager won't send submenu cell images on RPC versions >= 5.0 && < 7.0 #2047](https://github.com/smartdevicelink/sdl_java_suite/issues/1756)
 
-- [ GenerateSources gradle task in javaSE incorrectly reads the version from gradle.properties instead of VERSION file](https://github.com/smartdevicelink/sdl_java_suite/issues/1763)
+- [GenerateSources gradle task in javaSE incorrectly reads the version from gradle.properties instead of VERSION file](https://github.com/smartdevicelink/sdl_java_suite/issues/1763)
 

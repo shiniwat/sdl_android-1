@@ -252,6 +252,10 @@ public class VirtualDisplayEncoder {
                 inputSurface.release();
                 inputSurface = null;
             }
+            if (mEglCore != null) {
+                mEglCore.release();
+                mEglCore = null;
+            }
         } catch (Exception ex) {
             DebugTool.logError(TAG, "shutDown() failed");
         }
@@ -263,6 +267,9 @@ public class VirtualDisplayEncoder {
      * @param Height
      */
     private void setupGLES(int Width, int Height) {
+        if (mEglCore != null) {
+            mEglCore.release();
+        }
         mEglCore = new EglCore(null, 0);
 
         // This 1x1 offscreen is created just to get the texture name (mTextureId).
@@ -481,6 +488,27 @@ public class VirtualDisplayEncoder {
         // Create a MediaCodec encoder and configure it. Get a Surface we can use for recording into.
         try {
             mVideoEncoder = MediaCodec.createEncoderByType(videoMimeType);
+
+            int width = streamingParams.getResolution().getResolutionWidth();
+            int height = streamingParams.getResolution().getResolutionHeight();
+            int frameRate = streamingParams.getFrameRate();
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                boolean streamSupported = mVideoEncoder.getCodecInfo()
+                    .getCapabilitiesForType(videoMimeType)
+                    .getVideoCapabilities()
+                    .areSizeAndRateSupported(width, height, frameRate);
+
+                if (!streamSupported) {
+                    String errorString = "Video streaming " + width + " by " + height + " at "
+                        + frameRate + "fps is unsupported on this device";
+
+                    DebugTool.logError(TAG, errorString);
+
+                    return null;
+                }
+            }
+
             mVideoEncoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             Surface surface = mVideoEncoder.createInputSurface(); //prepared
 
