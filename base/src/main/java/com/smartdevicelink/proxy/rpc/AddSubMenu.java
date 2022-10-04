@@ -94,7 +94,7 @@ import java.util.Hashtable;
  * 			<td>menuLayout</td>
  * 			<td>MenuLayout</td>
  * 			<td>Sets the layout of the submenu screen.</td>
- * 			<td></td>
+ * 			<td>N</td>
  * 			<td></td>
  * 			<td>SmartDeviceLink 6.0</td>
  * 		</tr>
@@ -112,9 +112,7 @@ import java.util.Hashtable;
  *          <td>Optional secondary text to display</td>
  *          <td>N</td>
  *          <td>{"string_min_length": 1, "string_max_length": 500}</td>
- *          <td>
- *             @since SmartDeviceLink 7.1.0
- *          </td>
+ *          <td>SmartDeviceLink 7.1.0</td>
  *      </tr>
  *      <tr>
  *          <td>tertiaryText</td>
@@ -122,9 +120,7 @@ import java.util.Hashtable;
  *          <td>Optional tertiary text to display</td>
  *          <td>N</td>
  *          <td>{"string_min_length": 1, "string_max_length": 500}</td>
- *          <td>
- *             @since SmartDeviceLink 7.1.0
- *          </td>
+ *          <td>SmartDeviceLink 7.1.0</td>
  *      </tr>
  *      <tr>
  *          <td>secondaryImage</td>
@@ -132,9 +128,7 @@ import java.util.Hashtable;
  *          <td>Optional secondary image struct for sub-menu cell</td>
  *          <td>N</td>
  *          <td></td>
- *          <td>
- *             @since SmartDeviceLink 7.1.0
- *          </td>
+ *          <td>SmartDeviceLink 7.1.0</td>
  *      </tr>
  *  </table>
  *  <b>Response</b>
