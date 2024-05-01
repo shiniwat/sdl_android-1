@@ -92,6 +92,7 @@ public class TransportBroker {
 
     Messenger routerServiceMessenger = null;
     final Messenger clientMessenger;
+    private RouterServiceMessageEmitter routerServiceMessageEmitter;
 
     boolean isBound = false, registeredWithRouterService = false;
     private String routerPackage = null, routerClassName = null;
@@ -110,6 +111,13 @@ public class TransportBroker {
 
             public void onServiceConnected(ComponentName className, IBinder service) {
                 DebugTool.logInfo(TAG, "Bound to service " + className.toString());
+                routerServiceMessageEmitter = new RouterServiceMessageEmitter(new RouterServiceMessageEmitter.Callback() {
+                    @Override
+                    public boolean onMessageToSend(Message message) {
+                        return sendMessageToRouterService(message, 0);
+                    }
+                });
+                routerServiceMessageEmitter.start();
                 routerServiceMessenger = new Messenger(service);
                 isBound = true;
                 //So we just established our connection
@@ -119,7 +127,7 @@ public class TransportBroker {
 
             public void onServiceDisconnected(ComponentName className) {
                 DebugTool.logInfo(TAG, "Unbound from service " + className.getClassName());
-                routerServiceMessenger = null;
+                shutDownRouterServiceMessenger();
                 registeredWithRouterService = false;
                 isBound = false;
                 onHardwareDisconnected(null, null);
@@ -128,7 +136,12 @@ public class TransportBroker {
     }
 
     protected boolean sendMessageToRouterService(Message message) {
-        return sendMessageToRouterService(message, 0);
+        if (routerServiceMessageEmitter != null) {
+            routerServiceMessageEmitter.add(message);
+            routerServiceMessageEmitter.alert();
+        }
+        // Updated to only return true as we have added sending messages to SdlRouterService to be on a different thread.
+        return true;
     }
 
     protected boolean sendMessageToRouterService(Message message, int retryCount) {
@@ -153,7 +166,7 @@ public class TransportBroker {
                             } catch (InterruptedException e1) {
                                 e1.printStackTrace();
                             }
-                            return sendMessageToRouterService(message, retryCount++);
+                            return sendMessageToRouterService(message, ++retryCount);
                         } else {
                             //DeadObject, time to kill our connection
                             DebugTool.logInfo(TAG, "Dead object while attempting to send packet");
@@ -432,7 +445,7 @@ public class TransportBroker {
     public void resetSession() {
         synchronized (INIT_LOCK) {
             unregisterWithRouterService();
-            routerServiceMessenger = null;
+            shutDownRouterServiceMessenger();
             unBindFromRouterService();
             isBound = false;
         }
@@ -446,7 +459,7 @@ public class TransportBroker {
         synchronized (INIT_LOCK) {
             unregisterWithRouterService();
             unBindFromRouterService();
-            routerServiceMessenger = null;
+            shutDownRouterServiceMessenger();
             currentContext = null;
 
         }
@@ -632,8 +645,7 @@ public class TransportBroker {
         } else {
             DebugTool.logWarning(TAG, "Unable to unregister, not bound to router service");
         }
-
-        routerServiceMessenger = null;
+        shutDownRouterServiceMessenger();
     }
 
     protected ComponentName getRouterService() {
@@ -749,5 +761,16 @@ public class TransportBroker {
         bundle.putLong(TransportConstants.SESSION_ID_EXTRA, sessionId);
         msg.setData(bundle);
         this.sendMessageToRouterService(msg);
+    }
+
+    /**
+     * Method to shut down RouterServiceMessenger
+     */
+    private void shutDownRouterServiceMessenger() {
+        if (routerServiceMessageEmitter != null) {
+            routerServiceMessageEmitter.close();
+        }
+        routerServiceMessageEmitter = null;
+        routerServiceMessenger = null;
     }
 }
